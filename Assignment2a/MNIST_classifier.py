@@ -5,7 +5,7 @@ from torchvision import transforms
 import math
 import numpy
 import torch.utils.data as data #At the heart of PyTorch data loading utility is torch.utils.data.DataLoader class.
-                                #It represents a Python iterable over a dataset
+								#It represents a Python iterable over a dataset
 import torch.nn as nn #torch.nn provide us many more classes and modules to implement and train the neural network.
 import torch.optim as optim # torch.optim is a package implementing various optimization algorithms e.g SGD, ASGD
 
@@ -108,30 +108,30 @@ class Neural_Network(object):
 		print('Dataset loaded...')
 		return np.array(train_x), np.array(train_y),np.array(test_x),np.array(test_y)
 
-	def loadDataset(data_dir, training_size, validation_size, test_size, BATCH_SIZE, SHUFFLE):
-    
-    mean = 0.0
-    variance = 0.5
-    
-    transform = transforms.Compose([transforms.ToTensor(),
-                                    transforms.Grayscale(1),
-                                    transforms.Normalize(0, math.sqrt(variance))])
-    # Loading the training dataset. We need to split it into a training and validation part
-    train_dataset = tv.datasets.ImageFolder(root = data_dir + '/train', transform = transform)
-    train_set, val_set = torch.utils.data.random_split(train_dataset, [training_size, validation_size])
-    # Loading the test dataset. We need to split it into the user define test_size
-    test_set = tv.datasets.ImageFolder(root = data_dir + '/test', transform = transform)
-    test_set , unused_test_set = torch.utils.data.random_split(test_set, [test_size, len(test_set)-test_size])
+	def loadDatasetTorch(data_dir, training_size, validation_size, test_size, BATCH_SIZE, SHUFFLE):
+	
+		mean = 0.0
+		variance = 0.5
+	
+		transform = transforms.Compose([transforms.ToTensor(),
+									transforms.Grayscale(1),
+									transforms.Normalize(0, math.sqrt(variance))])
+		# Loading the training dataset. We need to split it into a training and validation part
+		train_dataset = tv.datasets.ImageFolder(root = data_dir + '/train', transform = transform)
+		train_set, val_set = torch.utils.data.random_split(train_dataset, [training_size, validation_size])
+		# Loading the test dataset. We need to split it into the user define test_size
+		test_set = tv.datasets.ImageFolder(root = data_dir + '/test', transform = transform)
+		test_set , unused_test_set = torch.utils.data.random_split(test_set, [test_size, len(test_set)-test_size])
 
-    # We define a set of data loaders that we can use for various purposes later.
-    # Note that for actually training a model, we will use different data loaders
-    # with a lower batch size.
-    train_loader = data.DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True, drop_last=False) # Training data is kept to shuffle every time by default.
-    val_loader = data.DataLoader(val_set, batch_size=BATCH_SIZE, shuffle=SHUFFLE, drop_last=False)
-    
-    test_loader = data.DataLoader(test_set, batch_size=BATCH_SIZE, shuffle=SHUFFLE, drop_last=False)
-    
-    return train_loader, val_loader, test_loader
+		# We define a set of data loaders that we can use for various purposes later.
+		# Note that for actually training a model, we will use different data loaders
+		# with a lower batch size.
+		train_loader = data.DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True, drop_last=False) # Training data is kept to shuffle every time by default.
+		val_loader = data.DataLoader(val_set, batch_size=BATCH_SIZE, shuffle=SHUFFLE, drop_last=False)
+	
+		test_loader = data.DataLoader(test_set, batch_size=BATCH_SIZE, shuffle=SHUFFLE, drop_last=False)
+	
+		return train_loader, val_loader, test_loader
 
 		
 
@@ -394,7 +394,7 @@ def main():
 
 	print("Train accuracy", train_accuracy)
 	print("Test accuracy", test_accuracy)
-    """
+	"""
 	
 
 	###################################################################
