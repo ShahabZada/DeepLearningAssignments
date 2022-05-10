@@ -1,12 +1,21 @@
 # Include libraries which may use in implementation
+import torch
+import torchvision as tv
+from torchvision import transforms
+import math
+import numpy
+import torch.utils.data as data #At the heart of PyTorch data loading utility is torch.utils.data.DataLoader class.
+                                #It represents a Python iterable over a dataset
+import torch.nn as nn #torch.nn provide us many more classes and modules to implement and train the neural network.
+import torch.optim as optim # torch.optim is a package implementing various optimization algorithms e.g SGD, ASGD
+
 from matplotlib import image as img
+import csv
 import time
 import seaborn as sns
 import pandas as pd
 from sklearn.manifold import TSNE
-import glob
 import numpy as np
-import json
 import sklearn.datasets as ds
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
@@ -17,7 +26,7 @@ import os
 from sklearn.metrics import confusion_matrix
 
 
-print("This is commit")
+
 # Create a Neural_Network class
 np.random.seed(5)
 
@@ -41,157 +50,90 @@ class Neural_Network(object):
 		self.W3 = np.random.randn(self.outputSize , self.hiddenLayer2)  # randomly initialize W3 using random function of numpy
 		self.b3 = np.zeros((self.outputSize, 1))
 	def feedforward(self, X):
-		#forward propagation through our network
-		# dot product of X (input) and set of weights
-		# apply activation function (i.e. whatever function was passed in initialization)
-		##########       Layer 1
+		pass
 		
-		z1 = np.dot(self.W1, X) + self.b1
-
-		if self.activation_function == 'sigmoid':
-			a1=self.sigmoid(z1)
-
-		if self.activation_function == 'tanh':
-			a1 = self.tanh(z1)
-		
-		if self.activation_function == 'relu':
-			a1 = self.relu(z1)
-		############      Layer2
-		z2 = np.dot(self.W2, a1) + self.b2
-		if self.activation_function == 'sigmoid':
-			a2 = self.sigmoid(z2)
-		if self.activation_function == 'tanh':
-			a2 = self.tanh(z2)
-		
-		if self.activation_function == 'relu':
-			a2 = self.relu(z2)
-		############      Layer2
-		z3 = np.dot(self.W3, a2) + self.b3
-		a3 = self.softmax(z3)
-
-		#cache the activations for backpropagation
-		cache = {"z1": z1,
-				 "a1": a1,
-				 "z2": z2,
-				 "a2": a2,
-				 "z3": z3,
-				 "a3": a3}
-	
-		return  a3, cache   # return your answer with as a final output of the network
-
-	def sigmoid(self, s):
-		# activation function
-		return 1/(1 + np.exp(-s)) # apply sigmoid function on s and return it's value
-
-	def sigmoid_derivative(self, s):
-		#derivative of sigmoid
-		return self.sigmoid(s)*(1-self.sigmoid(s))# apply derivative of sigmoid on s and return it's value 
-	
-	def tanh(self, s):
-		# activation function
-		return (np.exp(s) - np.exp(-s))/(np.exp(s) + np.exp(-s)) # apply tanh function on s and return it's value
-
-	def tanh_derivative(self, s):
-		#derivative of tanh
-		return 1 - np.power(self.tanh(s),2) # apply derivative of tanh on s and return it's value
-	
-	def relu(self, s):
-		# activation function
-		return np.maximum(s, 0.0) # apply relu function on s and return it's value
-
-	def relu_derivative(self, s):
-		#derivative of relu
-		return (s>0) * 1 # apply derivative of relu on s and return it's value
-	def softmax(self,X):
-		expo = np.exp(X)
-		expo_sum = np.sum(np.exp(X),axis=0)
-		return expo/expo_sum
 
 	def backwardpropagate(self,X, Y, y_pred, lr, cache):
-		# backward propagate through the network
-		# compute error in output which is loss compute cross entropy loss function
-		# applying derivative of that applied activation function to the error
-		# adjust set of weights
-
-		#load the values that have been cached during forward propagation
-		a1 = cache["a1"]
-		a2 = cache["a2"]
-		a3 = cache["a3"]
-		z1 = cache["z1"]
-		z2 = cache["z2"]
-		z3 = cache["z3"]
-		
-		m = X.shape[1]
-		# Backward propagation: calculate dW1, db1, dW2, db2. 
-
-		dz3 = y_pred
-		dz3[Y, range(m)] -= 1
-		dz3 = dz3/m
-		
-		dW3 = (1/m)*np.dot(dz3,a2.T)
-		db3 = (1/m)*(np.sum(dz3, axis=1,keepdims=True))
-
-		da2 = np.dot(self.W3.T,dz3)
-
-		if self.activation_function == 'sigmoid':
-			dz2 = np.multiply(da2,self.sigmoid_derivative(z2))
-
-		if self.activation_function == 'tanh':
-			dz2 = np.multiply(da2,self.tanh_derivative(z2))
-		
-		if self.activation_function == 'relu':
-			dz2 = np.multiply(da2,self.relu_derivative(z2))
-		
-		
-		dW2 = (1/m)*np.dot(dz2,a1.T)
-
-		db2 = (1/m)*(np.sum(dz2, axis=1,keepdims=True))
-		da1 = np.dot(self.W2.T,dz2)
-
-		if self.activation_function == 'sigmoid':
-			dz1 = np.multiply(da1,self.sigmoid_derivative(z1))
-
-		if self.activation_function == 'tanh':
-			dz1 = np.multiply(da1,self.tanh_derivative(z1))
-		
-		if self.activation_function == 'relu':
-			dz1 = np.multiply(da1,self.relu_derivative(z1))
-		
-		dW1 = (1/m)*np.dot(dz1, X.T)
-		db1 = (1/m)*(np.sum(dz1, axis=1,keepdims=True))
-
-		#update step
-		#Update the weights
-		self.W1 = self.W1 - lr * dW1
-		self.b1 = self.b1 - lr * db1
-		self.W2 = self.W2 - lr * dW2
-		self.b2 = self.b2 - lr * db2
-		self.W3 = self.W3 - lr * dW3
-		self.b3 = self.b3 - lr * db3
-		
-		
-		return
-	# Function to load dataset
+		pass
 
 	def loadDataset(self,path):
 		path = path
-		print(path)
+		print("pathhhhh",path)
 		print('Loading Dataset...')
 		train_x, train_y, test_x, test_y = [], [], [], []
-		for i in range(10):
-			print(f'Loading images form {path} /train/ + {str(i)}')
-			for filename in glob.glob(path + '/train/' + str(i)+'/*.png'):
-				im=img.imread(filename)
-				train_x.append(im)
-				train_y.append(i)
-		for i in range(10):
-			print(f'Loading images form {path} /test/ + {str(i)}')
-			for filename in glob.glob(path + '/test/' + str(i)+'//*.png'):
-				im=img.imread(filename)
-				test_x.append(im)
-				test_y.append(i)
+		fname_train=[]
+		label_train=[]
+		fname_test=[]
+		label_test=[]
+		# loading the train data
+		file = open(path+'train/train.csv')
+		csvreader = csv.reader(file)
+		j=0
+		k=100
+		for i in csvreader:
+			fname_train.append(i[0])
+			label_train.append(i[1])
+			j=j+1
+			if j==k:
+				break
+		del fname_train[0]
+		del label_train[0]
+
+		train_y = label_train
+		
+		for filename in fname_train:
+			im=img.imread(path+'train/train_new/'+filename)
+			train_x.append(im)
+
+		# loading the test data
+		file = open(path+'test/test.csv')
+		csvreader = csv.reader(file)
+		j=0
+		for i in csvreader:
+			fname_test.append(i[0])
+			label_test.append(i[1])
+			j=j+1
+			if j==k:
+				break
+		del fname_test[0]
+		del label_test[0]
+
+		test_y = label_test
+		
+		for filename in fname_test:
+			im=img.imread(path+'test/test_new/'+filename)
+			test_x.append(im)
+
+			
 		print('Dataset loaded...')
 		return np.array(train_x), np.array(train_y),np.array(test_x),np.array(test_y)
+
+	def loadDataset(data_dir, training_size, validation_size, test_size, BATCH_SIZE, SHUFFLE):
+    
+    mean = 0.0
+    variance = 0.5
+    
+    transform = transforms.Compose([transforms.ToTensor(),
+                                    transforms.Grayscale(1),
+                                    transforms.Normalize(0, math.sqrt(variance))])
+    # Loading the training dataset. We need to split it into a training and validation part
+    train_dataset = tv.datasets.ImageFolder(root = data_dir + '/train', transform = transform)
+    train_set, val_set = torch.utils.data.random_split(train_dataset, [training_size, validation_size])
+    # Loading the test dataset. We need to split it into the user define test_size
+    test_set = tv.datasets.ImageFolder(root = data_dir + '/test', transform = transform)
+    test_set , unused_test_set = torch.utils.data.random_split(test_set, [test_size, len(test_set)-test_size])
+
+    # We define a set of data loaders that we can use for various purposes later.
+    # Note that for actually training a model, we will use different data loaders
+    # with a lower batch size.
+    train_loader = data.DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True, drop_last=False) # Training data is kept to shuffle every time by default.
+    val_loader = data.DataLoader(val_set, batch_size=BATCH_SIZE, shuffle=SHUFFLE, drop_last=False)
+    
+    test_loader = data.DataLoader(test_set, batch_size=BATCH_SIZE, shuffle=SHUFFLE, drop_last=False)
+    
+    return train_loader, val_loader, test_loader
+
+		
 
 	def meanSubtraction(self,data):
 		mean_of_data=np.mean(data, axis=0)
@@ -234,13 +176,7 @@ class Neural_Network(object):
 	
 	def crossentropy(self, Y, Y_pred):
 			
-		m = Y.shape[1]
-		
-		# compute error based on crossentropy loss 
-		log_likelihood = -np.log(Y_pred[Y,range(m)])
-		#print("log_liklyhood",log_likelihood)
-		loss = np.sum(log_likelihood) / m
-		return loss
+		pass
 		
 		#train_SGD(trainX, trainY, validationX = validX, validationY = validY,learningRate = 2, batch_size=50, training_epochs=50, plot_err= True)
 	def train_SGD(self, trainX, trainY, validationX, validationY, learningRate, batch_size, training_epochs, plot_err= True):
@@ -326,38 +262,11 @@ class Neural_Network(object):
 		return acc # return accuracy    
 		
 	def saveModel(self,name):
-		# save your trained model, it is your interpretation how, which and what data you store
-		# which you will use later for prediction
-		data = {
-			'sizes' : [self.inputSize,self.hiddenLayer1, self.hiddenLayer2, self.outputSize],
-			'weights': [self.W1.tolist(), self.W2.tolist(), self.W3.tolist()],
-			'biases' : [self.b1.tolist(), self.b2.tolist(), self.b3.tolist()],
-			'activation' :[self.activation_function]
-
-		}
-		
-		f = open('models/'+name,'w')
-		json.dump(data,f)
-		f.close()
-		return 1
+		pass
 
 		
 	def loadModel(self,name):
-		# load your trained model, load exactly how you stored it.
-		f=open('models/'+name)
-		data = json.load(f)
-
-		self.inputSize,self.hiddenLayer1, self.hiddenLayer2, self.outputSize = data['sizes']
-		
-		self.W1, self.W2, self.W3 = data['weights']
-		
-		self.b1, self.b2, self.b3 = data['biases']
-
-		self.activation_function = data['activation'][0]
- 
-		f.close()
-		
-		return 1
+		pass
 
 	def confusion_Mat(self, y_true, y_pred,name):
 		pred = np.where(y_pred > 0.5, 1, 0).T
@@ -379,10 +288,10 @@ def main():
 	
 
 	wd_path = os.getcwd()
-	data_path = 'Task3_MNIST_Data/'
+	data_path = 'Data/'
 	
 
-	_path=os.path.join(wd_path,data_path) 
+	_path=os.path.join(wd_path,data_path)
 	
 				
 	model = Neural_Network(3,784,[128,64,10],activation_function='sigmoid') #relu doesn't work
@@ -395,8 +304,14 @@ def main():
 	#      numpy array takes less time to load
 	# Uncomment the below code while running the first time.
 
+	#model.loadDataset(_path)
 	
 	trainX,trainY,testX,testY = model.loadDataset(_path)
+	print(trainX.shape,trainY.shape)
+	print(testX.shape,testY.shape)
+
+	"""
+	
 	# save to npy file
 	save('data_arrays/xtrain.npy', trainX)
 	save('data_arrays/ytrain.npy', trainY)
@@ -414,22 +329,22 @@ def main():
 
 	trainX = trainX.reshape((trainX.shape[0],28*28))
 	testX = testX.reshape((testX.shape[0],28*28))
-
+	"""
 	##################################################################
 	##   Mean subtraction   #
 	##################################################################
 	
-	
+	"""
 	data = model.meanSubtraction(np.vstack((trainX,testX)))          
 	trainX,testX=data[0:60000,:],data[60000:70000,:]
-	
+	"""
 
 	##################################################################
 	##   shuffeling the data and dividing to train validation sets   #
 	##################################################################
 	
 	#Note: shuffle this dataset before dividing it into three parts
-	
+	"""
 	trainX, trainY = shuffle(trainX, trainY, random_state=0)
 	
 	trainX, validX, trainY, validY = train_test_split(trainX, trainY, test_size=0.1, random_state=0)
@@ -447,10 +362,11 @@ def main():
 	testY = np.expand_dims(testY, axis=0)
 
 	print(trainX.shape, trainY.shape,  validX.shape, validY.shape)
-	
+	"""
 	###################################################################
 	#    ONE Hot encoding
 	###################################################################
+	"""
 	TrainY = model.one_Hot_encode(trainY)
 	ValidY = model.one_Hot_encode(validY)
 	TestY = model.one_Hot_encode(testY)
@@ -460,13 +376,13 @@ def main():
 	print("one Hot encoded vector is = ",ValidY[2]," For the value ",validY[0][2])  
 	print("one Hot encoded vector is = ",TestY[1]," For the value ",testY[0][1])  
 	print("\n")
-
+`	"""
 	
 
 	###################################################################
 	#    Training the Model
 	###################################################################
-	
+	"""
 	model = model.train_SGD(trainX, trainY, validationX = validX, validationY = validY,learningRate = 0.5, batch_size=20, training_epochs=5, plot_err= True)
 	#save the best model which you have trained, 
 	model.saveModel('Task3model5.json')
@@ -478,25 +394,26 @@ def main():
 
 	print("Train accuracy", train_accuracy)
 	print("Test accuracy", test_accuracy)
-    
+    """
 	
 
 	###################################################################
 	#    Loading the trained model and checking accuracies and confusion matrix
 	###################################################################
+	"""
 	# create class object
 	mm = Neural_Network()
 	# load model which will be provided by you
 	mm.loadModel('Task3model5.json')
 
-	
+	"""
 	
 	
 	
 	###############################################################
 	#     tSNE plots
 	#test data tsne plot 
-	
+	"""
 	data = testX
 	datay = testY
 
@@ -510,12 +427,13 @@ def main():
 	#Layer 2 tsne plot
 	tsnA2 = tsnCache['a2']
 	mm.tSNE(tsnA2.T,datay.T,'Second Hidden layer tSNE')
-	
+	"""
 	
 	################################################################
 	#         Confusion Matrix calculation
 	#
 	#training data Confusion matrix
+	"""
 	print("\n######################################################\n Accuracies \n")
 	_pred = mm.predict(trainX)
 	mm.confusion_Mat(trainY, _pred,'Training Data Confusion Matrix')
@@ -541,8 +459,10 @@ def main():
 	plt.show()
 
 	print("\n\n\n")
+	"""
 	##############################################################
 	#        Predict and display a digit
+	"""
 	k = 9000  #max 10000
 	digit= testX[:,k:k+1]
 	pred_dig = mm.predict_digit(digit)
@@ -550,7 +470,7 @@ def main():
 	plt.imshow(digit.reshape(28,28))
 	plt.show()
 	print("done")
-	
+	"""
 
 
 if __name__ == '__main__':
