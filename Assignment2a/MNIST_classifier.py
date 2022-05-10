@@ -1,4 +1,5 @@
 # Include libraries which may use in implementation
+from pyexpat import model
 import torch
 import torchvision as tv
 from torchvision import transforms
@@ -7,6 +8,7 @@ import numpy
 import torch.utils.data as data #At the heart of PyTorch data loading utility is torch.utils.data.DataLoader class.
 								#It represents a Python iterable over a dataset
 import torch.nn as nn #torch.nn provide us many more classes and modules to implement and train the neural network.
+import torch.nn.functional as F
 import torch.optim as optim # torch.optim is a package implementing various optimization algorithms e.g SGD, ASGD
 
 from matplotlib import image as img
@@ -30,33 +32,39 @@ from sklearn.metrics import confusion_matrix
 # Create a Neural_Network class
 np.random.seed(5)
 
-class Neural_Network(object):        
-	def __init__(self, no_of_layers=3, input_dim=784, neurons_per_layer =[128,64,10],activation_function=''):        
-		#__init__(self, inputSize = 784,hiddenlayer1 = 128,hiddenlayer2 = 64, outputSize = 10 ,activation_function=''):
-		# size of layers  #no_of_layers, input_dim, neurons_per_layer
-		self.inputSize = input_dim
-		 
-		self.hiddenLayer1 = neurons_per_layer[0] #hiddenlayer1
-		self.hiddenLayer2 = neurons_per_layer[1] #hiddenlayer2
-		self.outputSize = neurons_per_layer[2]#outputSize
-		self.activation_function=activation_function
-		#weights
-		self.W1 = np.random.randn(self.hiddenLayer1 , self.inputSize)  # randomly initialize W1 using random function of numpy
-		self.b1 = np.zeros((self.hiddenLayer1, 1))
-
-		self.W2 = np.random.randn(self.hiddenLayer2 , self.hiddenLayer1)  # randomly initialize W2 using random function of numpy
-		self.b2 = np.zeros((self.hiddenLayer2, 1))
-		   
-		self.W3 = np.random.randn(self.outputSize , self.hiddenLayer2)  # randomly initialize W3 using random function of numpy
-		self.b3 = np.zeros((self.outputSize, 1))
-	def feedforward(self, X):
-		pass
+class Neural_Network(nn.Module):        
+	def __init__(self, no_of_layers=3, input_dim=784, neurons_per_layer =[128,64,10],activation_function=''):
+		super(Neural_Network, self).__init__()
+		self.l1 = nn.Linear(input_dim, neurons_per_layer[0])
+		self.relu = nn.ReLU()
+		self.l2 = nn.Linear(neurons_per_layer[0], neurons_per_layer[1])
+		self.relu = nn.ReLU()
+		self.l3 = nn.Linear(neurons_per_layer[1], neurons_per_layer[2])
 		
+	def forward(self, x):
+		x = x.view(x.shape[0],-1)
+		x = self.l1(x)
+		x = self.relu(x)
+		x = self.l2(x)
+		x = self.relu(x)
+		x = self.l3(x)
+		return x#F.log_softmax(x)
 
-	def backwardpropagate(self,X, Y, y_pred, lr, cache):
-		pass
+		"""
+		super().__init__()
+		self.module_list = nn.ModuleList()
+		self.linears = nn.ModuleList([nn.Linear(input_dim, neurons_per_layer[0])])
+		self.linears.extend([nn.Linear(neurons_per_layer[i], neurons_per_layer[i+1]) for i in range(1, no_of_layers-1)])
+		#self.linears.append(nn.Linear(layers_size, output_size)
+	
+	def forward(self, x):
+		x = x.view(x.shape[0],-1)
+		for layer in self.module_list:
+			x = layer(x)
+		return x
+		"""
 
-	def loadDataset(self,path):
+	def loadDataset(self, path, batch_size):
 		path = path
 		print("pathhhhh",path)
 		print('Loading Dataset...')
@@ -69,13 +77,14 @@ class Neural_Network(object):
 		file = open(path+'train/train.csv')
 		csvreader = csv.reader(file)
 		j=0
-		k=100
+		k=5
+		
 		for i in csvreader:
 			fname_train.append(i[0])
 			label_train.append(i[1])
-			j=j+1
-			if j==k:
-				break
+			#j=j+1
+			#if j==k:
+			#	break
 		del fname_train[0]
 		del label_train[0]
 
@@ -92,9 +101,9 @@ class Neural_Network(object):
 		for i in csvreader:
 			fname_test.append(i[0])
 			label_test.append(i[1])
-			j=j+1
-			if j==k:
-				break
+			#j=j+1
+			#if j==k:
+			#	break
 		del fname_test[0]
 		del label_test[0]
 
@@ -104,9 +113,38 @@ class Neural_Network(object):
 			im=img.imread(path+'test/test_new/'+filename)
 			test_x.append(im)
 
+		train_x, train_y, test_x, test_y = np.array(train_x), np.array(train_y),np.array(test_x),np.array(test_y)
+		#converting the string arrays to int
+		train_y = train_y.astype(np.int64)
+		test_y = test_y.astype(np.int8)
+
+		#######################################################
+		#making pytorch data loaders
+		#######################################################
+		transform = transforms.Compose( [transforms.ToTensor(),
+	 							transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+		train = torch.utils.data.TensorDataset(torch.tensor(train_x), torch.tensor(train_y))
+		train_set, val_set = torch.utils.data.random_split(train, [36470, 7000])  #total 43470
+		
+		train_loader = torch.utils.data.DataLoader(train_set, batch_size, shuffle=True)
+		vaild_loader = torch.utils.data.DataLoader(val_set, batch_size, shuffle=True)
+		
+		#checking the split
+		"""
+		for i in range(5):
+			print("check random = ", val_set[i][1])
+			plt.imshow(val_set[i][0])
+			plt.show()
+		"""
+		
+		
+
+		test = torch.utils.data.TensorDataset(torch.tensor(test_x), torch.tensor(test_y))
+		test_loader = torch.utils.data.DataLoader(test, batch_size, shuffle=True)
+		
 			
 		print('Dataset loaded...')
-		return np.array(train_x), np.array(train_y),np.array(test_x),np.array(test_y)
+		return train_loader, vaild_loader, test_loader
 
 	def loadDatasetTorch(data_dir, training_size, validation_size, test_size, BATCH_SIZE, SHUFFLE):
 	
@@ -133,12 +171,6 @@ class Neural_Network(object):
 	
 		return train_loader, val_loader, test_loader
 
-		
-
-	def meanSubtraction(self,data):
-		mean_of_data=np.mean(data, axis=0)
-		data = np.subtract(data,mean_of_data)
-		return data
 
 	def tSNE(self,X,Y,plot_title):
 		feat_cols = [ 'pixel'+str(i) for i in range(X.shape[1]) ]
@@ -174,71 +206,55 @@ class Neural_Network(object):
 		plt.title(plot_title)
 		plt.show()
 	
-	def crossentropy(self, Y, Y_pred):
-			
-		pass
 		
-		#train_SGD(trainX, trainY, validationX = validX, validationY = validY,learningRate = 2, batch_size=50, training_epochs=50, plot_err= True)
-	def train_SGD(self, trainX, trainY, validationX, validationY, learningRate, batch_size, training_epochs, plot_err= True):
-		# feed forward trainX and trainY and recivce predicted value
-		# backpropagation with trainX, trainY, predicted value and learning rate.
-		# if validationX and validationY are not null than show validation accuracy and error of the model by printing values.
-		# plot error of the model if plot_err is true
-		
+	def train(self, train_loader, valid_loader, criterion, optimizer, training_epochs, plot_err= True):
 		model = self
-		lr = learningRate
-		epochs = training_epochs
-		batch_size=batch_size
-		n_examples = trainX.shape[1]
-		epoch_loss = []
-		epoch_accuracy =[]
-		validation_loss = []
-		validation_accuracy = []
-		print("\n\nTraining...")
-		for epoch in range(epochs):
-			loss=0
-			#shuffle the data (SGD)
-			trainX, trainY = shuffle(trainX.T, trainY.T, random_state=0)
-			trainX,trainY = trainX.T,trainY.T
-			n_train = trainX.shape[1]
+		for e in range(training_epochs):
+			train_loss = 0.0
+			for data, labels in train_loader:
+				# Transfer Data to GPU if available
+				if torch.cuda.is_available():
+					data, labels = data.cuda(), labels.cuda()
+				
+				# Clear the gradients
+				optimizer.zero_grad()
+				# Forward Pass
+				target = model(data)
+				
+				#print("Target++++",target,(labels[0]))
+				# Find the Loss
+				loss = criterion(target,labels)
+				# Calculate gradients
+				loss.backward()
+				# Update Weights
+				optimizer.step()
+				# Calculate Loss
+				train_loss += loss.item()
 			
-			#create mini batches
-			Xmini_batches = np.array([trainX[:, k: k+batch_size] for k in range(0, n_train, batch_size)])
-			Ymini_batches = np.array([trainY[:, k: k+batch_size] for k in range(0, n_train, batch_size)])
-			
-			for Xmini_batch,Ymini_batch in zip(Xmini_batches,Ymini_batches):
-				y_hat,cache=model.feedforward(Xmini_batch)
-				loss = model.crossentropy(Ymini_batch, y_hat)
-				acc= model.accuracy(Ymini_batch, y_hat)
-				model.backwardpropagate(Xmini_batch, Ymini_batch, y_hat, lr,cache)
-			
-			
-			epoch_loss.append(loss)
-			epoch_accuracy.append(acc)
-			# validation
-			if validationX is not None:
-				y_hat_valid,_ = model.feedforward(validationX)
-				valid_loss = model.crossentropy(validationY,y_hat_valid)
-				valid_acc= model.accuracy(validationY,y_hat_valid)
-				validation_loss.append(valid_loss)
-				validation_accuracy.append(valid_acc)
-				print("Epoch = %3d   Training Loss = %3.3f  Validation Loss = %3.3f"%(epoch, epoch_loss[epoch],validation_loss[epoch]) )
-			else:
-				print("Epoch = %3d   Training Loss = %3.3f"%(epoch, epoch_loss[epoch]) )
-		print("\nDone.")  
-		if plot_err:
-			plt.figure()
-			plt.plot(np.linspace(0,epochs,epochs),epoch_loss)
-			plt.plot(np.linspace(0,epochs,epochs),validation_loss)
-			plt.legend(["training loss", "validation loss"], loc ="upper right")
-			plt.title(f'Learning Rate={lr}   #epoches={epochs}    batch Size={batch_size}')
-			plt.figure()
-			plt.plot(np.linspace(0,epochs,epochs),epoch_accuracy)
-			plt.plot(np.linspace(0,epochs,epochs),validation_accuracy)
-			plt.legend(["training accuracy", "validation accuracy"], loc ="lower right")
-			plt.title(f'Learning Rate={lr}   #epoches={epochs}    batch Size={batch_size}')
-			plt.show()  
-
+			valid_loss = 0.0
+			#model.eval()     # Optional when not using Model Specific layer
+			for data, labels in valid_loader:
+				# Transfer Data to GPU if available
+				if torch.cuda.is_available():
+					data, labels = data.cuda(), labels.cuda()
+				
+				# Forward Pass
+				target = model(data)
+				# Find the Loss
+				loss = criterion(target,labels)
+				# Calculate Loss
+				valid_loss += loss.item()
+		
+			print(f'Epoch {e+1} Training Loss: {train_loss / len(train_loader)} \t\t Validation Loss: {valid_loss / len(valid_loader)}')
+			"""
+			if min_valid_loss > valid_loss:
+				print(f'Validation Loss Decreased({min_valid_loss:.6f\
+				}--->{valid_loss:.6f}) \t Saving The Model')
+				min_valid_loss = valid_loss
+				
+				# Saving State Dict
+				torch.save(model.state_dict(), 'saved_model.pth') 
+			"""
 		return model
 
 	def predict(self, testX):
@@ -293,92 +309,23 @@ def main():
 
 	_path=os.path.join(wd_path,data_path)
 	
-				
-	model = Neural_Network(3,784,[128,64,10],activation_function='sigmoid') #relu doesn't work
-	
-	
-	#i load the mnist images of handwritten digits and store it in numpy array 
-	#loading images takes much longer time then loading numpy arrays
-	##################################################################################
-	#      saving the data to numpy array and save in disk to reduce the data loading time
-	#      numpy array takes less time to load
-	# Uncomment the below code while running the first time.
-
-	#model.loadDataset(_path)
-	
-	trainX,trainY,testX,testY = model.loadDataset(_path)
-	print(trainX.shape,trainY.shape)
-	print(testX.shape,testY.shape)
-
-	"""
-	
-	# save to npy file
-	save('data_arrays/xtrain.npy', trainX)
-	save('data_arrays/ytrain.npy', trainY)
-	save('data_arrays/xtest.npy', testX)
-	save('data_arrays/ytest.npy', testY)
+	model = Neural_Network(3,784,[128,64,10],activation_function='relu') #relu doesn't work
 	
 
-	#loading the data array
-	trainX = load('data_arrays/xtrain.npy')
-	trainY = load('data_arrays/ytrain.npy')
-	testX = load('data_arrays/xtest.npy')
-	testY = load('data_arrays/ytest.npy')
-
+	train_loader, valid_loader, test_loader=model.loadDataset(_path,batch_size=64) 			
 	
+	print(model)
 
-	trainX = trainX.reshape((trainX.shape[0],28*28))
-	testX = testX.reshape((testX.shape[0],28*28))
-	"""
+	criterion = nn.CrossEntropyLoss()
+	optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+	model.train(train_loader, valid_loader, criterion, optimizer, training_epochs = 10, plot_err= True)
+			
+	
 	##################################################################
 	##   Mean subtraction   #
 	##################################################################
 	
-	"""
-	data = model.meanSubtraction(np.vstack((trainX,testX)))          
-	trainX,testX=data[0:60000,:],data[60000:70000,:]
-	"""
-
-	##################################################################
-	##   shuffeling the data and dividing to train validation sets   #
-	##################################################################
 	
-	#Note: shuffle this dataset before dividing it into three parts
-	"""
-	trainX, trainY = shuffle(trainX, trainY, random_state=0)
-	
-	trainX, validX, trainY, validY = train_test_split(trainX, trainY, test_size=0.1, random_state=0)
-
-	trainX = np.transpose(trainX)# training data point  (2,640)
-	trainY = np.transpose(trainY)# training lables      (1,640)
-	trainY = np.expand_dims(trainY, axis=0)
-
-	validX = np.transpose(validX) # validation data point
-	validY = np.transpose(validY) # validation lables
-	validY = np.expand_dims(validY, axis=0)
-
-	testX = np.transpose(testX) # testing data point
-	testY = np.transpose(testY)# testing lables
-	testY = np.expand_dims(testY, axis=0)
-
-	print(trainX.shape, trainY.shape,  validX.shape, validY.shape)
-	"""
-	###################################################################
-	#    ONE Hot encoding
-	###################################################################
-	"""
-	TrainY = model.one_Hot_encode(trainY)
-	ValidY = model.one_Hot_encode(validY)
-	TestY = model.one_Hot_encode(testY)
-	#print the value for confirmation
-	print("\n######################################################\n One Hot encoded vectors\n")
-	print("one Hot encoded vector is = ",TrainY[1]," For the value ",trainY[0][1])  
-	print("one Hot encoded vector is = ",ValidY[2]," For the value ",validY[0][2])  
-	print("one Hot encoded vector is = ",TestY[1]," For the value ",testY[0][1])  
-	print("\n")
-`	"""
-	
-
 	###################################################################
 	#    Training the Model
 	###################################################################
