@@ -17,6 +17,7 @@ import os
 from sklearn.metrics import confusion_matrix
 
 
+print("This is commit")
 # Create a Neural_Network class
 np.random.seed(5)
 
