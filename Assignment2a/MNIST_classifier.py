@@ -50,19 +50,7 @@ class Neural_Network(nn.Module):
 		x = self.l3(x)
 		return x#F.log_softmax(x)
 
-		"""
-		super().__init__()
-		self.module_list = nn.ModuleList()
-		self.linears = nn.ModuleList([nn.Linear(input_dim, neurons_per_layer[0])])
-		self.linears.extend([nn.Linear(neurons_per_layer[i], neurons_per_layer[i+1]) for i in range(1, no_of_layers-1)])
-		#self.linears.append(nn.Linear(layers_size, output_size)
-	
-	def forward(self, x):
-		x = x.view(x.shape[0],-1)
-		for layer in self.module_list:
-			x = layer(x)
-		return x
-		"""
+		
 
 	def loadDataset(self, path, batch_size):
 		path = path
@@ -83,8 +71,8 @@ class Neural_Network(nn.Module):
 			fname_train.append(i[0])
 			label_train.append(i[1])
 			#j=j+1
-			#if j==k:
-			#	break
+			#if j%2000==0:
+			#	print("Loaded Files",j)
 		del fname_train[0]
 		del label_train[0]
 
@@ -93,7 +81,10 @@ class Neural_Network(nn.Module):
 		for filename in fname_train:
 			im=img.imread(path+'train/train_new/'+filename)
 			train_x.append(im)
-
+			j=j+1
+			if j%2000==0:
+				print("Loaded Train Files",j)
+		
 		# loading the test data
 		file = open(path+'test/test.csv')
 		csvreader = csv.reader(file)
@@ -101,17 +92,19 @@ class Neural_Network(nn.Module):
 		for i in csvreader:
 			fname_test.append(i[0])
 			label_test.append(i[1])
-			#j=j+1
-			#if j==k:
-			#	break
+			
+			
 		del fname_test[0]
 		del label_test[0]
-
+		print("len test label",len(label_test))
 		test_y = label_test
-		
+		j=0
 		for filename in fname_test:
 			im=img.imread(path+'test/test_new/'+filename)
 			test_x.append(im)
+			j=j+1
+			if j%2000==0:
+				print("Loaded test Files",j)
 
 		train_x, train_y, test_x, test_y = np.array(train_x), np.array(train_y),np.array(test_x),np.array(test_y)
 		#converting the string arrays to int
@@ -124,7 +117,7 @@ class Neural_Network(nn.Module):
 		transform = transforms.Compose( [transforms.ToTensor(),
 	 							transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 		train = torch.utils.data.TensorDataset(torch.tensor(train_x), torch.tensor(train_y))
-		train_set, val_set = torch.utils.data.random_split(train, [36470, 7000])  #total 43470
+		train_set, val_set = torch.utils.data.random_split(train, [36470, 7000])#[3,1])#[36470, 7000])  #total 43470
 		
 		train_loader = torch.utils.data.DataLoader(train_set, batch_size, shuffle=True)
 		vaild_loader = torch.utils.data.DataLoader(val_set, batch_size, shuffle=True)
@@ -209,8 +202,13 @@ class Neural_Network(nn.Module):
 		
 	def train(self, train_loader, valid_loader, criterion, optimizer, training_epochs, plot_err= True):
 		model = self
+		trainLoss=[]
+		trainAcc=[]
+		validLoss=[]
+		validAcc=[]
 		for e in range(training_epochs):
 			train_loss = 0.0
+			train_acc =0.0
 			for data, labels in train_loader:
 				# Transfer Data to GPU if available
 				if torch.cuda.is_available():
@@ -229,9 +227,13 @@ class Neural_Network(nn.Module):
 				# Update Weights
 				optimizer.step()
 				# Calculate Loss
+				train_acc = train_acc + torch.sum(torch.argmax(target) == labels)
+				
 				train_loss += loss.item()
 			
+
 			valid_loss = 0.0
+			valid_acc = 0.0
 			#model.eval()     # Optional when not using Model Specific layer
 			for data, labels in valid_loader:
 				# Transfer Data to GPU if available
@@ -244,7 +246,13 @@ class Neural_Network(nn.Module):
 				loss = criterion(target,labels)
 				# Calculate Loss
 				valid_loss += loss.item()
-		
+				valid_acc = valid_acc + torch.sum(torch.argmax(target) == labels)
+			
+			trainLoss.append(train_loss/len(train_loader))
+			validLoss.append(valid_loss/len(valid_loader))
+			trainAcc.append(train_acc/len(train_loader))
+			validAcc.append(valid_acc/len(valid_loader))
+
 			print(f'Epoch {e+1} Training Loss: {train_loss / len(train_loader)} \t\t Validation Loss: {valid_loss / len(valid_loader)}')
 			"""
 			if min_valid_loss > valid_loss:
@@ -255,7 +263,7 @@ class Neural_Network(nn.Module):
 				# Saving State Dict
 				torch.save(model.state_dict(), 'saved_model.pth') 
 			"""
-		return model
+		return model,trainLoss, validLoss, trainAcc, validAcc
 
 	def predict(self, testX):
 		# predict the value of testX
@@ -317,9 +325,15 @@ def main():
 	print(model)
 
 	criterion = nn.CrossEntropyLoss()
-	optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
-	model.train(train_loader, valid_loader, criterion, optimizer, training_epochs = 10, plot_err= True)
-			
+	optimizer = optim.SGD(model.parameters(), lr=0.1, momentum=0.9)
+	model, trainLoss, validLoss, trainAcc, validAcc=model.train(train_loader, valid_loader, criterion, optimizer, training_epochs = 10, plot_err= True)
+	plt.figure()
+	plt.plot(trainLoss)
+	plt.plot(validLoss)
+	plt.figure()
+	plt.plot(trainAcc)
+	plt.plot(validAcc)
+	plt.show()
 	
 	##################################################################
 	##   Mean subtraction   #
