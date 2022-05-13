@@ -4,12 +4,13 @@ import torch
 import torchvision as tv
 from torchvision import transforms
 import math
-import numpy
 import torch.utils.data as data #At the heart of PyTorch data loading utility is torch.utils.data.DataLoader class.
 								#It represents a Python iterable over a dataset
 import torch.nn as nn #torch.nn provide us many more classes and modules to implement and train the neural network.
 import torch.nn.functional as F
 import torch.optim as optim # torch.optim is a package implementing various optimization algorithms e.g SGD, ASGD
+from pytorch_lightning.callbacks.early_stopping import EarlyStopping
+
 
 from matplotlib import image as img
 import csv
@@ -33,22 +34,25 @@ from sklearn.metrics import confusion_matrix
 np.random.seed(5)
 
 class Neural_Network(nn.Module):        
-	def __init__(self, no_of_layers=3, input_dim=784, neurons_per_layer =[128,64,10],activation_function=''):
+	def __init__(self, no_of_layers=3, input_dim=784, neurons_per_layer =[128,64,10],dropout=0.5):
 		super(Neural_Network, self).__init__()
 		self.l1 = nn.Linear(input_dim, neurons_per_layer[0])
 		self.relu = nn.ReLU()
 		self.l2 = nn.Linear(neurons_per_layer[0], neurons_per_layer[1])
 		self.relu = nn.ReLU()
 		self.l3 = nn.Linear(neurons_per_layer[1], neurons_per_layer[2])
+		self.dropout = nn.Dropout(dropout)
 		
 	def forward(self, x):
 		x = x.view(x.shape[0],-1)
 		x = self.l1(x)
+		x = self.dropout(x)
 		x = self.relu(x)
 		x = self.l2(x)
+		x = self.dropout(x)
 		x = self.relu(x)
 		x = self.l3(x)
-		return x#F.log_softmax(x)
+		return x
 
 		
 
@@ -209,6 +213,8 @@ class Neural_Network(nn.Module):
 		for e in range(training_epochs):
 			train_loss = 0.0
 			train_acc =0.0
+			total=0.0
+			correct=0.0
 			for data, labels in train_loader:
 				# Transfer Data to GPU if available
 				if torch.cuda.is_available():
@@ -227,15 +233,25 @@ class Neural_Network(nn.Module):
 				# Update Weights
 				optimizer.step()
 				# Calculate Loss
-				train_acc = train_acc + torch.sum(torch.argmax(target) == labels)
+				_, predicted = target.max(1)
+				total += labels.size(0)
+				correct += predicted.eq(labels).sum().item()
+				
+				#train_acc = train_acc + torch.sum(torch.argmax(target) == labels)
 				
 				train_loss += loss.item()
 			
+			
+			trainLoss.append(train_loss/len(train_loader))
+			trainAcc.append(100.*correct/total)
 
 			valid_loss = 0.0
 			valid_acc = 0.0
+			total=0.0
+			correct=0.0
 			#model.eval()     # Optional when not using Model Specific layer
 			for data, labels in valid_loader:
+				
 				# Transfer Data to GPU if available
 				if torch.cuda.is_available():
 					data, labels = data.cuda(), labels.cuda()
@@ -246,12 +262,14 @@ class Neural_Network(nn.Module):
 				loss = criterion(target,labels)
 				# Calculate Loss
 				valid_loss += loss.item()
-				valid_acc = valid_acc + torch.sum(torch.argmax(target) == labels)
+				_, predicted = target.max(1)
+				total += labels.size(0)
+				correct += predicted.eq(labels).sum().item()
 			
-			trainLoss.append(train_loss/len(train_loader))
+			self.log("valid_loss", valid_loss)
 			validLoss.append(valid_loss/len(valid_loader))
-			trainAcc.append(train_acc/len(train_loader))
-			validAcc.append(valid_acc/len(valid_loader))
+			validAcc.append(100.*correct/total)
+			#validAcc.append(valid_acc/len(valid_loader))
 
 			print(f'Epoch {e+1} Training Loss: {train_loss / len(train_loader)} \t\t Validation Loss: {valid_loss / len(valid_loader)}')
 			"""
@@ -317,16 +335,22 @@ def main():
 
 	_path=os.path.join(wd_path,data_path)
 	
-	model = Neural_Network(3,784,[128,64,10],activation_function='relu') #relu doesn't work
-	
+	model = Neural_Network(3,784,[64,64,10],dropout=0.5) #relu doesn't work
+	#import torch.onnx
+	#dummy_input = torch.randn( 1, 28, 28)
+	#torch.onnx.export(model, dummy_input, "model.onnx")
 
+	
 	train_loader, valid_loader, test_loader=model.loadDataset(_path,batch_size=64) 			
 	
 	print(model)
 
+	#criterion = nn.CrossEntropyLoss()
+	#optimizer = optim.SGD(model.parameters(), lr=0.05, momentum=0.9)
 	criterion = nn.CrossEntropyLoss()
-	optimizer = optim.SGD(model.parameters(), lr=0.1, momentum=0.9)
-	model, trainLoss, validLoss, trainAcc, validAcc=model.train(train_loader, valid_loader, criterion, optimizer, training_epochs = 10, plot_err= True)
+	optimizer = optim.Adam(model.parameters(),lr=0.008,betas=(0.9,0.999),eps=1e-08,weight_decay=0,amsgrad=False)
+	#trainer = Trainer(callbacks=[EarlyStopping(monitor="valid_loss", mode="min")])
+	model, trainLoss, validLoss, trainAcc, validAcc=model.train(train_loader, valid_loader, criterion, optimizer, training_epochs = 50, plot_err= True)
 	plt.figure()
 	plt.plot(trainLoss)
 	plt.plot(validLoss)
