@@ -1,0 +1,29 @@
+	model = Neural_Network(3,784,[64,64,10],dropout=0.5)
+
+	##################################################################
+	##              Important parameters for the model              ##
+	##################################################################
+	plot_err = True
+	epochs = 25
+	learning_rate = 0.05
+	batch_size =64
+
+	##################################################################
+	##   Loading the data (see the loadDataset function)            ##
+	##################################################################
+	train_loader, valid_loader, test_loader=model.loadDataset(_path,batch_size = batch_size) 			
+	
+	print(model)
+
+	#####################################
+	#Loss function and optimizer
+
+	criterion = nn.CrossEntropyLoss()
+	optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9)
+	#criterion = nn.CrossEntropyLoss()
+	#optimizer = optim.Adam(model.parameters(),lr=0.008,betas=(0.9,0.999),eps=1e-08,weight_decay=0,amsgrad=False)
+	##################################################################
+	##                            Learning rate decay             ##
+	##################################################################
+	decayRate = 0.96
+	lr_decay_scheduler = optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=decayRate)

@@ -1,5 +1,8 @@
+# %%
+
 # Include libraries which may use in implementation
 from pyexpat import model
+from unittest import TestLoader
 import torch
 import torchvision as tv
 from torchvision import transforms
@@ -9,7 +12,7 @@ import torch.utils.data as data #At the heart of PyTorch data loading utility is
 import torch.nn as nn #torch.nn provide us many more classes and modules to implement and train the neural network.
 import torch.nn.functional as F
 import torch.optim as optim # torch.optim is a package implementing various optimization algorithms e.g SGD, ASGD
-from pytorch_lightning.callbacks.early_stopping import EarlyStopping
+#from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 
 
 from matplotlib import image as img
@@ -32,7 +35,7 @@ from sklearn.metrics import confusion_matrix
 
 # Create a Neural_Network class
 np.random.seed(5)
-
+# %%
 class Neural_Network(nn.Module):        
 	def __init__(self, no_of_layers=3, input_dim=784, neurons_per_layer =[128,64,10],dropout=0.5):
 		super(Neural_Network, self).__init__()
@@ -137,36 +140,13 @@ class Neural_Network(nn.Module):
 		
 
 		test = torch.utils.data.TensorDataset(torch.tensor(test_x), torch.tensor(test_y))
-		test_loader = torch.utils.data.DataLoader(test, batch_size, shuffle=True)
+		test_loader = torch.utils.data.DataLoader(test, 10000, shuffle=False) #making one batch of whole test data
 		
 			
 		print('Dataset loaded...')
 		return train_loader, vaild_loader, test_loader
 
-	def loadDatasetTorch(data_dir, training_size, validation_size, test_size, BATCH_SIZE, SHUFFLE):
 	
-		mean = 0.0
-		variance = 0.5
-	
-		transform = transforms.Compose([transforms.ToTensor(),
-									transforms.Grayscale(1),
-									transforms.Normalize(0, math.sqrt(variance))])
-		# Loading the training dataset. We need to split it into a training and validation part
-		train_dataset = tv.datasets.ImageFolder(root = data_dir + '/train', transform = transform)
-		train_set, val_set = torch.utils.data.random_split(train_dataset, [training_size, validation_size])
-		# Loading the test dataset. We need to split it into the user define test_size
-		test_set = tv.datasets.ImageFolder(root = data_dir + '/test', transform = transform)
-		test_set , unused_test_set = torch.utils.data.random_split(test_set, [test_size, len(test_set)-test_size])
-
-		# We define a set of data loaders that we can use for various purposes later.
-		# Note that for actually training a model, we will use different data loaders
-		# with a lower batch size.
-		train_loader = data.DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True, drop_last=False) # Training data is kept to shuffle every time by default.
-		val_loader = data.DataLoader(val_set, batch_size=BATCH_SIZE, shuffle=SHUFFLE, drop_last=False)
-	
-		test_loader = data.DataLoader(test_set, batch_size=BATCH_SIZE, shuffle=SHUFFLE, drop_last=False)
-	
-		return train_loader, val_loader, test_loader
 
 
 	def tSNE(self,X,Y,plot_title):
@@ -204,12 +184,13 @@ class Neural_Network(nn.Module):
 		plt.show()
 	
 		
-	def train(self, train_loader, valid_loader, criterion, optimizer, training_epochs, plot_err= True):
+	def train(self, train_loader, valid_loader, criterion, optimizer,lr_decay_scheduler, training_epochs):
 		model = self
 		trainLoss=[]
 		trainAcc=[]
 		validLoss=[]
 		validAcc=[]
+		min_valid_loss = 4.0
 		for e in range(training_epochs):
 			train_loss = 0.0
 			train_acc =0.0
@@ -242,6 +223,7 @@ class Neural_Network(nn.Module):
 				train_loss += loss.item()
 			
 			
+			
 			trainLoss.append(train_loss/len(train_loader))
 			trainAcc.append(100.*correct/total)
 
@@ -266,22 +248,31 @@ class Neural_Network(nn.Module):
 				total += labels.size(0)
 				correct += predicted.eq(labels).sum().item()
 			
-			self.log("valid_loss", valid_loss)
+			
 			validLoss.append(valid_loss/len(valid_loader))
 			validAcc.append(100.*correct/total)
-			#validAcc.append(valid_acc/len(valid_loader))
+			
+			if lr_decay_scheduler is not None:
+				lr_decay_scheduler.step()
+			min_valid_loss = model.EarlyStopping(min_valid_loss, valid_loss/len(valid_loader))
 
 			print(f'Epoch {e+1} Training Loss: {train_loss / len(train_loader)} \t\t Validation Loss: {valid_loss / len(valid_loader)}')
-			"""
-			if min_valid_loss > valid_loss:
-				print(f'Validation Loss Decreased({min_valid_loss:.6f\
-				}--->{valid_loss:.6f}) \t Saving The Model')
-				min_valid_loss = valid_loss
-				
-				# Saving State Dict
-				torch.save(model.state_dict(), 'saved_model.pth') 
-			"""
+			
+			
+			
 		return model,trainLoss, validLoss, trainAcc, validAcc
+
+	def EarlyStopping(self,min_valid_loss, valid_loss):
+		min_valid_loss =min_valid_loss
+		if min_valid_loss > valid_loss:
+			model=self
+			print(f'Validation Loss Decreased({min_valid_loss:.6f}--->{valid_loss:.6f}) \t Saving The Model')
+			min_valid_loss = valid_loss
+			
+			# Saving State Dict
+			torch.save(model.state_dict(), 'saved_model.pth') 
+		
+		return min_valid_loss
 
 	def predict(self, testX):
 		# predict the value of testX
@@ -311,152 +302,163 @@ class Neural_Network(nn.Module):
 		pass
 
 	def confusion_Mat(self, y_true, y_pred,name):
-		pred = np.where(y_pred > 0.5, 1, 0).T
-		pred = np.expand_dims(np.argmax(pred,axis=1),axis=1).T
+		_, pred = y_pred.max(1)
+		print("check if this work")
+		print(len(pred))
+		print(len(y_true))
 		classes = ('0', '1', '2', '3', '4','5', '6', '7', '8', '9')
-		cf_matrix = confusion_matrix(y_true.T, pred.T)
+		cf_matrix = confusion_matrix(y_true, pred)
 		df_cm = pd.DataFrame(cf_matrix/np.sum(cf_matrix) *10, index = [i for i in classes],columns = [i for i in classes])
 		plt.figure(figsize = (12,7))
 		sns.heatmap(df_cm, annot=True).set(title=name)
 		plt.show()
-
-	def one_Hot_encode(self, arr):
-		
-		b = np.zeros((arr.size, arr.max()+1))
-		b[np.arange(arr.size),arr] = 1
-		return b
-
-def main():   
+# %%
 	
 
-	wd_path = os.getcwd()
-	data_path = 'Data/'
+#def main():   
 	
+# %%
+wd_path = os.getcwd()
+data_path = 'Data/'
 
-	_path=os.path.join(wd_path,data_path)
+
+_path=os.path.join(wd_path,data_path)
+
+#Initialize the model class (All modeules and functions are in one class)
+model = Neural_Network(3,784,[64,64,10],dropout=0.5)
+
+##################################################################
+##              Important parameters for the model              ##
+##################################################################
+plot_err = True
+epochs = 2
+learning_rate = 0.05
+batch_size =64
+
+##################################################################
+##   Loading the data (see the loadDataset function)            ##
+##################################################################
+train_loader, valid_loader, test_loader=model.loadDataset(_path,batch_size = batch_size) 			
+
+print(model)
+# %%
+#####################################
+#Loss function and optimizer
+
+criterion = nn.CrossEntropyLoss()
+optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9)
+#criterion = nn.CrossEntropyLoss()
+#optimizer = optim.Adam(model.parameters(),lr=0.008,betas=(0.9,0.999),eps=1e-08,weight_decay=0,amsgrad=False)
+##################################################################
+##                        Learning rate decay                   ##
+##################################################################
+decayRate = 0.96
+lr_decay_scheduler = optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=decayRate)
+
+##################################################################
+##                        Training The model                    ##
+##################################################################
+# The EarlyStoping is implemented in the class neural network
+#  
+model, trainLoss, validLoss, trainAcc, validAcc=model.train(train_loader, valid_loader, criterion, optimizer=optimizer, lr_decay_scheduler=lr_decay_scheduler, training_epochs = epochs)
+
+#saving the model
+torch.save(model.state_dict(),'saved_model.pth') 
+
+##################################################################
+##   plotting the train and validation errors and accuracies   #
+##################################################################
+if plot_err:
+		plt.figure()
+		plt.plot(np.linspace(0,epochs,epochs),trainLoss)
+		plt.plot(np.linspace(0,epochs,epochs),validLoss)
+		plt.legend(["training loss", "validation loss"], loc ="upper right")
+		plt.title(f'Learning Rate={learning_rate}   #epoches={epochs}    batch Size={batch_size}')
+		plt.figure()
+		plt.plot(np.linspace(0,epochs,epochs),trainAcc)
+		plt.plot(np.linspace(0,epochs,epochs),validAcc)
+		plt.legend(["training accuracy", "validation accuracy"], loc ="lower right")
+		plt.title(f'Learning Rate={learning_rate}   #epoches={epochs}    batch Size={batch_size}')
+		plt.show()  
+
+
+
+# %%
+###################################################################
+#    Loading the trained model and checking accuracies and confusion matrix
+###################################################################
+
+# create class object
+
+trainedModel = Neural_Network(3,784,[64,64,10],dropout=0.5)
+# load model which will be provided by you
+trainedModel.load_state_dict(torch.load('saved_model.pth'))
+# %%
+###############################################################
+#                      test accuracy
+###############################################################
+testAcc = 0
+tdata = 0
+tlabel=0
+for data, labels in test_loader:
+	tdata=data
+	tlabel=labels
 	
-	model = Neural_Network(3,784,[64,64,10],dropout=0.5) #relu doesn't work
-	#import torch.onnx
-	#dummy_input = torch.randn( 1, 28, 28)
-	#torch.onnx.export(model, dummy_input, "model.onnx")
+	# Forward Pass
+test_pred = trainedModel(data)
+_, predicted = test_pred.max(1)
+print(len(predicted),len(tlabel))
+total = labels.size(0)
+#print("total = ",total)
+correct = predicted.eq(labels).sum().item()
+#print("correct =",correct)
+testAcc = (100.*correct/total)	
 
-	
-	train_loader, valid_loader, test_loader=model.loadDataset(_path,batch_size=64) 			
-	
-	print(model)
+print("test Accuracy = ",testAcc)
 
-	#criterion = nn.CrossEntropyLoss()
-	#optimizer = optim.SGD(model.parameters(), lr=0.05, momentum=0.9)
-	criterion = nn.CrossEntropyLoss()
-	optimizer = optim.Adam(model.parameters(),lr=0.008,betas=(0.9,0.999),eps=1e-08,weight_decay=0,amsgrad=False)
-	#trainer = Trainer(callbacks=[EarlyStopping(monitor="valid_loss", mode="min")])
-	model, trainLoss, validLoss, trainAcc, validAcc=model.train(train_loader, valid_loader, criterion, optimizer, training_epochs = 50, plot_err= True)
-	plt.figure()
-	plt.plot(trainLoss)
-	plt.plot(validLoss)
-	plt.figure()
-	plt.plot(trainAcc)
-	plt.plot(validAcc)
-	plt.show()
-	
-	##################################################################
-	##   Mean subtraction   #
-	##################################################################
-	
-	
-	###################################################################
-	#    Training the Model
-	###################################################################
-	"""
-	model = model.train_SGD(trainX, trainY, validationX = validX, validationY = validY,learningRate = 0.5, batch_size=20, training_epochs=5, plot_err= True)
-	#save the best model which you have trained, 
-	model.saveModel('Task3model5.json')
-	# check accuracy of that model
-	trAcc,_ = model.feedforward(trainX)
-	tsAcc,_ = model.feedforward(testX)
-	train_accuracy = model.accuracy(trainY, trAcc) *100
-	test_accuracy = model.accuracy(testY,tsAcc) *100
+# %%
+################################################################
+#         Confusion Matrix calculation
+#
+#training data Confusion matrix
 
-	print("Train accuracy", train_accuracy)
-	print("Test accuracy", test_accuracy)
-	"""
-	
+print("\n######################################################\n Accuracies \n")
 
-	###################################################################
-	#    Loading the trained model and checking accuracies and confusion matrix
-	###################################################################
-	"""
-	# create class object
-	mm = Neural_Network()
-	# load model which will be provided by you
-	mm.loadModel('Task3model5.json')
+trainedModel.confusion_Mat(tlabel, test_pred,'Test Data Confusion Matrix')
+# %%
+###############################################################
+#     tSNE plots
+#test data tsne plot 
+"""
+data = testX
+datay = testY
 
-	"""
-	
-	
-	
-	###############################################################
-	#     tSNE plots
-	#test data tsne plot 
-	"""
-	data = testX
-	datay = testY
+mm.tSNE(data.T,datay.T,'Input layer tSNE')
 
-	mm.tSNE(data.T,datay.T,'Input layer tSNE')
+#layer 1 tsne plot
+_, tsnCache = mm.feedforward(data)
+tsnA1 = tsnCache['a1']
+mm.tSNE(tsnA1.T,datay.T,'First Hidden layer tSNE')
 
-	#layer 1 tsne plot
-	_, tsnCache = mm.feedforward(data)
-	tsnA1 = tsnCache['a1']
-	mm.tSNE(tsnA1.T,datay.T,'First Hidden layer tSNE')
-
-	#Layer 2 tsne plot
-	tsnA2 = tsnCache['a2']
-	mm.tSNE(tsnA2.T,datay.T,'Second Hidden layer tSNE')
-	"""
-	
-	################################################################
-	#         Confusion Matrix calculation
-	#
-	#training data Confusion matrix
-	"""
-	print("\n######################################################\n Accuracies \n")
-	_pred = mm.predict(trainX)
-	mm.confusion_Mat(trainY, _pred,'Training Data Confusion Matrix')
-	train_acc=mm.accuracy(trainY,_pred)*100
-	print("Training accuracy = ",train_acc)
-
-	#Validation data Confusion matrix
-	_pred = mm.predict(validX)
-	mm.confusion_Mat(validY, _pred,'Validation Data Confusion Matrix')
-	valid_acc=mm.accuracy(validY,_pred)*100
-	print("Validation accuracy = ",valid_acc)
-
-	#training data Confusion matrix
-	_pred = mm.predict(testX)
-	mm.confusion_Mat(testY, _pred,'Test Data Confusion Matrix')
-	test_acc=mm.accuracy(testY,_pred)*100
-	print("Test accuracy = ",test_acc)
-
-	plt.bar(['train','valid', 'test'],[train_acc, valid_acc, test_acc])
-	plt.xlabel('Data')
-	plt.ylabel("Accuracy")
-	plt.title('Train , Validation and test accuracies Bar Plot')
-	plt.show()
-
-	print("\n\n\n")
-	"""
-	##############################################################
-	#        Predict and display a digit
-	"""
-	k = 9000  #max 10000
-	digit= testX[:,k:k+1]
-	pred_dig = mm.predict_digit(digit)
-	print("Predicted digit = ",pred_dig)
-	plt.imshow(digit.reshape(28,28))
-	plt.show()
-	print("done")
-	"""
+#Layer 2 tsne plot
+tsnA2 = tsnCache['a2']
+mm.tSNE(tsnA2.T,datay.T,'Second Hidden layer tSNE')
+"""
+##############################################################
+#        Predict and display a digit
+"""
+k = 9000  #max 10000
+digit= testX[:,k:k+1]
+pred_dig = mm.predict_digit(digit)
+print("Predicted digit = ",pred_dig)
+plt.imshow(digit.reshape(28,28))
+plt.show()
+print("done")
+"""
 
 
-if __name__ == '__main__':
-	main()
+#if __name__ == '__main__':
+#	main()
+
+
+# %%
