@@ -63,21 +63,23 @@ class Neural_Network(nn.Module):
 			nn.MaxPool2d(2),
 			nn.ReLU(),
 			nn.Conv2d(10, 20, kernel_size=5),
-			nn.Dropout(),
+			nn.Dropout2d(),
 			nn.MaxPool2d(2),
 			nn.ReLU(),
 		)
 		self.fc_layers = nn.Sequential(
-			nn.Linear(320, 50),
+			nn.Linear(320, 10),
 			nn.ReLU(),
 			nn.Dropout(),
-			nn.Linear(50, 10),
+			nn.Linear(10, 10),
 			nn.Softmax(dim=1)
 		)
 
 	def forward(self, x):
 		x = self.conv_layers(x)
+		#print(x.shape)
 		x = x.view(-1, 320)
+		#print(x.shape)
 		x = self.fc_layers(x)
 		return x
 		"""
@@ -142,7 +144,7 @@ class Neural_Network(nn.Module):
 		plt.show()
 	
 		
-	def train(self, train_loader, valid_loader, criterion, optimizer,lr_decay_scheduler, training_epochs):
+	def train(self, train_loader, valid_loader, criterion, optimizer, training_epochs):
 		model = self
 		trainLoss=[]
 		trainAcc=[]
@@ -319,6 +321,7 @@ print(traindataset[1][1])
 plt.imshow(traindataset[1][0].reshape(28, 28))
 plt.show()
 
+
 # %%
 
 ##################################################################
@@ -327,7 +330,7 @@ plt.show()
 plot_err = True
 epochs = 20
 learning_rate = 0.05
-batch_size =128
+
 #####################################
 #Loss function and optimizer
 model = Neural_Network()
@@ -335,23 +338,23 @@ if torch.cuda.is_available():
 	model.cuda()
 criterion = nn.CrossEntropyLoss()
 #optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9)
-#criterion = nn.focalLoss()
-optimizer = optim.Adam(model.parameters(),lr=0.008,betas=(0.9,0.999),eps=1e-08,weight_decay=0,amsgrad=False)
+optimizer = optim.Adam(model.parameters(),lr=learning_rate,betas=(0.9,0.999),eps=1e-08,weight_decay=0,amsgrad=False)
 ##################################################################
 ##                        Learning rate decay                   ##
 ##################################################################
-decayRate = 0.96
-lr_decay_scheduler = optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=decayRate)
+#decayRate = 0.96
+#lr_decay_scheduler = optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=decayRate)
 
 ##################################################################
 ##                        Training The model                    ##
 ##################################################################
 # The EarlyStoping is implemented in the class neural network
 #  
-model, trainLoss, validLoss, trainAcc, validAcc=model.train(train_loader, valid_loader, criterion, optimizer=optimizer, lr_decay_scheduler=lr_decay_scheduler, training_epochs = epochs)
+model, trainLoss, validLoss, trainAcc, validAcc=model.train(train_loader, valid_loader, criterion, optimizer=optimizer, training_epochs = epochs)
 
 #saving the model
 torch.save(model.state_dict(),'saved_model.pth') 
+
 # %%
 
 ##################################################################
