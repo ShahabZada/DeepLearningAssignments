@@ -1,3 +1,4 @@
+Data
 Assignment2a/MSEE21001_Task2_02.py
 Assignment2a/MSEE21001_Task1_02.py
 Assignment2a/cifar.ipynb
@@ -40,3 +41,16 @@ Assignment2a/models/1/task1_model.pth
 Assignment2a/models/1/Capture.JPG
 Assignment2a/saved_model.pth
 Assignment2a/saved_model.pth
+Assignment2a/Data/test.zip
+Assignment2a/data/cifar-10-python.tar.gz
+Assignment2a/data/cifar-10-batches-py/batches.meta
+.gitignore
+Assignment2a/data/cifar-10-batches-py/data_batch_1
+Assignment2a/data/cifar-10-batches-py/data_batch_2
+Assignment2a/data/cifar-10-batches-py/data_batch_3
+Assignment2a/data/cifar-10-batches-py/data_batch_4
+Assignment2a/data/cifar-10-batches-py/data_batch_5
+Assignment2a/data/cifar-10-batches-py/test_batch
+Assignment2a/data/cifar-10-batches-py/readme.html
+Assignment2a
+.gitignore

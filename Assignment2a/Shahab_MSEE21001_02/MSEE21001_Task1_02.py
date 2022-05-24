@@ -4,6 +4,7 @@ import torch
 import torchvision as tv
 from torchvision import transforms
 import torch.utils.data as data 
+from torch.utils.data import Dataset
 import torch.nn as nn 
 import torch.nn.functional as F
 import torch.optim as optim 
@@ -29,6 +30,36 @@ from sklearn.metrics import classification_report
 
 # Create a Neural_Network class
 np.random.seed(5)
+# %%
+
+class myMNISTdata(Dataset):
+
+	def __init__(self, csv_file, root_dir, transform=None):
+		self.datacsv = pd.read_csv(root_dir + csv_file)
+		self.root_dir = root_dir
+		self.transform = transform
+
+	def __len__(self):
+		return len(self.datacsv)
+
+	def __getitem__(self, index):
+
+		img_path = os.path.join(self.root_dir, self.datacsv.iloc[index, 0])
+		image=img.imread(img_path)
+		label = torch.tensor(int(self.datacsv.iloc[index, 1]))
+		
+		if self.transform:
+			image = self.transform(image)
+
+		return (image, label)
+
+
+
+
+
+
+
+
 # %%
 class Neural_Network(nn.Module):        
 	def __init__(self, no_of_layers=3, input_dim=784, neurons_per_layer =[128,64,10],dropout=0.5):
@@ -260,7 +291,7 @@ class Neural_Network(nn.Module):
 		min_valid_loss =min_valid_loss
 		if min_valid_loss > valid_loss:
 			model=self
-			print(f'Validation Loss Decreased({min_valid_loss:.6f}--->{valid_loss:.6f}) \t Saving The Model')
+			#print(f'Validation Loss Decreased({min_valid_loss:.6f}--->{valid_loss:.6f}) \t Saving The Model')
 			min_valid_loss = valid_loss
 			
 			# Saving State Dict
@@ -315,29 +346,55 @@ class Neural_Network(nn.Module):
 		#return (Acc_score, prec_score, rec_score, F1_score)
 	
 # %%
-wd_path = os.getcwd()
+wd_path = '/home/shahabkhan/MyFolder/2ndSemester/deep learning/DeepLearningAssignments/Assignment2a/' #os.getcwd()
+print(wd_path)
 data_path = 'Data/'
 
 
 _path=os.path.join(wd_path,data_path)
+print(_path)
 batch_size = 64
 #Initialize the model class (All modeules and functions are in one class)
-model = Neural_Network(3,784,[64,64,10],dropout=0.5)
+#model = Neural_Network(3,784,[64,64,10],dropout=0.5)
 
 
 ##################################################################
 ##   Loading the data (see the loadDataset function)            ##
 ##################################################################
-train_loader, valid_loader, test_loader=model.loadDataset(_path,batch_size = batch_size) 			
+#train_loader, valid_loader, test_loader=model.loadDataset(_path,batch_size = batch_size) 			
 
-print(model)
+##################################################################
+##   good way to load dataset                   ##
+##################################################################
+
+transform = transforms.Compose([
+transforms.ToTensor(), transforms.Normalize(mean=0.5, std=0.5)])
+
+
+#transform = transforms.Compose( [transforms.ToTensor(),
+#	 							transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+traindataset = myMNISTdata(csv_file='train.csv',root_dir=_path + 'train/train_new/', transform=transform) 
+testdataset = myMNISTdata(csv_file='test.csv',root_dir=_path + 'test/test_new/', transform=transform) 
+train_set, val_set = torch.utils.data.random_split(traindataset, [36470, 7000])#[3,1])#[36470, 7000])  #total 43470
+		
+train_loader = torch.utils.data.DataLoader(train_set, batch_size, shuffle=True)
+vaild_loader = torch.utils.data.DataLoader(val_set, batch_size, shuffle=True)
+
+test_loader = torch.utils.data.DataLoader(testdataset, 10000, shuffle=False) #making one batch of whole test data
+print(traindataset[1][1])
+plt.imshow(traindataset[1][0].reshape(28, 28))
+plt.show()
+
+
+#print(model)
 # %%
-
+import time
+start_time = time.time()
 ##################################################################
 ##              Important parameters for the model              ##
 ##################################################################
 plot_err = True
-epochs = 2
+epochs = 20
 learning_rate = 0.05
 batch_size =128
 #####################################
@@ -358,10 +415,12 @@ lr_decay_scheduler = optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma
 ##################################################################
 # The EarlyStoping is implemented in the class neural network
 #  
-model, trainLoss, validLoss, trainAcc, validAcc=model.train(train_loader, valid_loader, criterion, optimizer=optimizer, lr_decay_scheduler=lr_decay_scheduler, training_epochs = epochs)
+model, trainLoss, validLoss, trainAcc, validAcc=model.train(train_loader, vaild_loader, criterion, optimizer=optimizer, lr_decay_scheduler=lr_decay_scheduler, training_epochs = epochs)
 
 #saving the model
 torch.save(model.state_dict(),'saved_model.pth') 
+
+print("--- %s seconds ---" % (time.time() - start_time))
 # %%
 
 ##################################################################
