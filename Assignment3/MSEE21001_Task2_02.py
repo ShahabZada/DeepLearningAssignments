@@ -213,8 +213,8 @@ class Neural_Network(nn.Module):
 			validLoss.append(valid_loss/len(valid_loader))
 			validAcc.append(100.*correct/total)
 			
-			if lr_decay_scheduler is not None:
-				lr_decay_scheduler.step()
+			#if lr_decay_scheduler is not None:
+			#	lr_decay_scheduler.step()
 			min_valid_loss = model.EarlyStopping(min_valid_loss, valid_loss/len(valid_loader))
 
 			print(f'Epoch {e+1} Training Loss: {train_loss / len(train_loader)} \t\t Validation Loss: {valid_loss / len(valid_loader)}')
