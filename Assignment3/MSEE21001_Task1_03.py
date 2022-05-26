@@ -8,6 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim 
 from torch.utils.data import Dataset
+from torchsummary import summary
 
 import random
 from matplotlib import image as img
@@ -25,7 +26,7 @@ from numpy import save,load #for saving and loading numpy arrays
 import os
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import classification_report
-
+from collections import OrderedDict
 
 
 # Create a Neural_Network class
@@ -52,98 +53,118 @@ class myMNISTdata(Dataset):
 
 		return (image, label)
 
-
-
 # %%
-class Neural_Network(nn.Module):        
-	def __init__(self):
-		super(Neural_Network, self).__init__()
-		self.conv_layers = nn.Sequential(
-			nn.Conv2d(1, 10, kernel_size=5),
-			nn.MaxPool2d(2),
-			nn.ReLU(),
-			nn.Conv2d(10, 20, kernel_size=5),
-			nn.Dropout2d(),
-			nn.MaxPool2d(2),
-			nn.ReLU(),
-		)
-		self.fc_layers = nn.Sequential(
-			nn.Linear(320, 10),
-			nn.ReLU(),
-			nn.Dropout(),
-			nn.Linear(10, 10),
-			nn.Softmax(dim=1)
+
+
+class Depthwise_Conv(nn.Module):
+	def __init__(self, in_fts, stride=(1, 1)):
+		super(Depthwise_Conv, self).__init__()
+		self.conv = nn.Sequential(
+			nn.Conv2d(in_fts, in_fts, kernel_size=(3, 3), stride=stride, padding=(1, 1), groups=in_fts),
+			nn.BatchNorm2d(in_fts),
+			nn.ReLU(inplace=True)
 		)
 
-	def forward(self, x):
-		x = self.conv_layers(x)
-		#print(x.shape)
-		x = x.view(-1, 320)
-		#print(x.shape)
-		x = self.fc_layers(x)
+	def forward(self, input_image):
+		x = self.conv(input_image)
 		return x
-		"""
-		self.conv1 = nn.Conv2d(1, 10, kernel_size=5)
-		self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
-		self.conv2_drop = nn.Dropout2d()
-		self.fc1 = nn.Linear(320, 50)
-		self.fc2 = nn.Linear(50, 10)
-	def forward(self, x):
-		x = self.conv1(x)
-		x = F.max_pool2d(x, 2)
-		#x = F.tanh(x)
-		x = F.relu(x)
-		x = self.conv2(x)
-		x = self.conv2_drop(x)
-		x = F.max_pool2d(x, 2)
-		#x = F.tanh(x)
-		x = F.relu(x)
-		x = x.view(-1, 320)
-		x = self.fc1(x)
-		#x = F.tanh(x)
-		x = F.relu(x)
-		x = F.dropout(x, training=self.training)
-		x = self.fc2(x)
-		return x
-		"""
-	
 
 
-	def tSNE(self,X,Y,plot_title):
-		feat_cols = [ 'pixel'+str(i) for i in range(X.shape[1]) ]
-		df = pd.DataFrame(X,columns=feat_cols)
-		df['y'] = Y
-		df['label'] = df['y'].apply(lambda i: str(i))
-		X, y = None, None
-		print('Size of the dataframe: {}'.format(df.shape))
-
-		# For reproducability of the results
-		np.random.seed(42)
-		rndperm = np.random.permutation(df.shape[0])
-
-		N = 10000
-		df_subset = df.loc[rndperm[:N],:].copy()
-		data_subset = df_subset[feat_cols].values
-		time_start = time.time()
-		tsne = TSNE(n_components=2, verbose=1, perplexity=40, n_iter=300)
-		tsne_results = tsne.fit_transform(data_subset)
-		print('t-SNE done! Time elapsed: {} seconds'.format(time.time()-time_start))
-
-		df_subset['tsne-2d-one'] = tsne_results[:,0]
-		df_subset['tsne-2d-two'] = tsne_results[:,1]
-		plt.figure(figsize=(16,10))
-		sns.scatterplot(
-			x="tsne-2d-one", y="tsne-2d-two",
-			hue="y",
-			palette=sns.color_palette("hls", 10),
-			data=df_subset,
-			legend="full",
-			alpha=0.3
+class Pointwise_Conv(nn.Module):
+	def __init__(self, in_fts, out_fts):
+		super(Pointwise_Conv, self).__init__()
+		self.conv = nn.Sequential(
+			nn.Conv2d(in_fts, out_fts, kernel_size=(1, 1)),
+			nn.BatchNorm2d(out_fts),
+			nn.ReLU(inplace=True)
 		)
-		plt.title(plot_title)
-		plt.show()
-	
-		
+
+	def forward(self, input_image):
+		x = self.conv(input_image)
+		return x
+
+
+class Depthwise_Separable_Conv(nn.Module):
+	def __init__(self, in_fts, out_fts, stride=(1, 1)):
+		super(Depthwise_Separable_Conv, self).__init__()
+		self.dw = Depthwise_Conv(in_fts=in_fts, stride=stride)
+		self.pw = Pointwise_Conv(in_fts=in_fts, out_fts=out_fts)
+
+	def forward(self, input_image):
+		x = self.pw(self.dw(input_image))
+		return x
+
+
+class MyMobileNet_v1(nn.Module):
+	def __init__(self, in_fts=1, num_filter=32, num_classes=10):
+		super(MyMobileNet_v1, self).__init__()
+
+		self.conv = nn.Sequential(
+			nn.Conv2d(in_fts, num_filter, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1)),
+			nn.BatchNorm2d(num_filter),
+			nn.ReLU(inplace=True)
+		)
+
+		self.in_fts = num_filter
+
+		# if type of sublist is list --> means make stride=(2,2)
+		# also check for length of sublist
+		# if length = 1 --> means stride=(2,2)
+		# if length = 2 --> means (num_times, num_filter)
+		self.nlayer_filter = [
+			num_filter * 2,  # no list() type --> default stride=(1,1)
+			[num_filter * pow(2, 2)],  # list() type and length is 1 --> means put stride=(2,2)
+			num_filter * pow(2, 2),
+			[num_filter * pow(2, 3)],
+			num_filter * pow(2, 3),
+			[num_filter * pow(2, 4)],
+			# list() type --> check length for this list = 2 --> means (n_times, num_filter)
+			[5, num_filter * pow(2, 4)],
+			[num_filter * pow(2, 5)],
+			num_filter * pow(2, 5)
+		]
+
+		self.DSC = self.layer_construct()
+
+		self.avgpool = nn.AdaptiveAvgPool2d(output_size=(1, 1))
+		self.fc = nn.Sequential(
+			nn.Linear(1024, num_classes),
+			#nn.Softmax()
+		)
+
+	def forward(self, input_image):
+		N = input_image.shape[0]
+		x = self.conv(input_image)
+		x = self.DSC(x)
+		x = self.avgpool(x)
+		x = x.reshape(N, -1)
+		x = self.fc(x)
+		return x
+
+	def layer_construct(self):
+		block = OrderedDict()
+		index = 1
+		for l in self.nlayer_filter:
+			if type(l) == list:
+				if len(l) == 2:  # (num_times, out_channel)
+					for _ in range(l[0]):
+						block[str(index)] = Depthwise_Separable_Conv(self.in_fts, l[1])
+						index += 1
+				else:  # stride(2,2)
+					block[str(index)] = Depthwise_Separable_Conv(self.in_fts, l[0], stride=(2, 2))
+					self.in_fts = l[0]
+					index += 1
+			else:
+				block[str(index)] = Depthwise_Separable_Conv(self.in_fts, l)
+				self.in_fts = l
+				index += 1
+
+		return nn.Sequential(block)
+
+
+class helper_functions(MyMobileNet_v1):
+	#def __init__(self, model):
+	#	self.model = model
 	def train(self, train_loader, valid_loader, criterion, optimizer, training_epochs):
 		model = self
 		trainLoss=[]
@@ -235,6 +256,40 @@ class Neural_Network(nn.Module):
 		
 		return min_valid_loss
 
+
+	def tSNE(self,X,Y,plot_title):
+		feat_cols = [ 'pixel'+str(i) for i in range(X.shape[1]) ]
+		df = pd.DataFrame(X,columns=feat_cols)
+		df['y'] = Y
+		df['label'] = df['y'].apply(lambda i: str(i))
+		X, y = None, None
+		print('Size of the dataframe: {}'.format(df.shape))
+
+		# For reproducability of the results
+		np.random.seed(42)
+		rndperm = np.random.permutation(df.shape[0])
+
+		N = 10000
+		df_subset = df.loc[rndperm[:N],:].copy()
+		data_subset = df_subset[feat_cols].values
+		time_start = time.time()
+		tsne = TSNE(n_components=2, verbose=1, perplexity=40, n_iter=300)
+		tsne_results = tsne.fit_transform(data_subset)
+		print('t-SNE done! Time elapsed: {} seconds'.format(time.time()-time_start))
+
+		df_subset['tsne-2d-one'] = tsne_results[:,0]
+		df_subset['tsne-2d-two'] = tsne_results[:,1]
+		plt.figure(figsize=(16,10))
+		sns.scatterplot(
+			x="tsne-2d-one", y="tsne-2d-two",
+			hue="y",
+			palette=sns.color_palette("hls", 10),
+			data=df_subset,
+			legend="full",
+			alpha=0.3
+		)
+		plt.title(plot_title)
+		plt.show()
 	def predict(self, testX):
 		# predict the value of testX
 		test_pred=self(testX)
@@ -280,6 +335,8 @@ class Neural_Network(nn.Module):
 		
 		print(classification_report(y_true, pred, digits=10))
 		#return (Acc_score, prec_score, rec_score, F1_score)
+
+
 # %%
 	
 
@@ -306,9 +363,6 @@ batch_size = 64
 transform = transforms.Compose([
 transforms.ToTensor(), transforms.Normalize(mean=0.5, std=0.5)])
 
-
-#transform = transforms.Compose( [transforms.ToTensor(),
-#	 							transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 traindataset = myMNISTdata(csv_file='train.csv',root_dir=_path + 'train/train_new/', transform=transform) 
 testdataset = myMNISTdata(csv_file='test.csv',root_dir=_path + 'test/test_new/', transform=transform) 
 train_set, val_set = torch.utils.data.random_split(traindataset, [36470, 7000])#[3,1])#[36470, 7000])  #total 43470
@@ -331,14 +385,26 @@ plot_err = True
 epochs = 20
 learning_rate = 0.05
 
-#####################################
+######################################
+# Initializing the model 
+######################################
+
+model = MyMobileNet_v1()
+summary(model, (1, 28, 28))
+# the helper_functions class inherits the MyMobileNet_v1
+#So by constructing the helper_function class we initialize the model too
+model = helper_functions()
+
+######################################
 #Loss function and optimizer
-model = Neural_Network()
-if torch.cuda.is_available():
-	model.cuda()
+######################################
 criterion = nn.CrossEntropyLoss()
 #optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9)
 optimizer = optim.Adam(model.parameters(),lr=learning_rate,betas=(0.9,0.999),eps=1e-08,weight_decay=0,amsgrad=False)
+
+if torch.cuda.is_available():
+		model.cuda()
+		criterion.cuda()
 ##################################################################
 ##                        Learning rate decay                   ##
 ##################################################################
@@ -350,10 +416,12 @@ optimizer = optim.Adam(model.parameters(),lr=learning_rate,betas=(0.9,0.999),eps
 ##################################################################
 # The EarlyStoping is implemented in the class neural network
 #  
-model, trainLoss, validLoss, trainAcc, validAcc=model.train(train_loader, valid_loader, criterion, optimizer=optimizer, training_epochs = epochs)
+
+model, trainLoss, validLoss, trainAcc, validAcc=model.train(train_loader, valid_loader, criterion, optimizer, epochs)
 
 #saving the model
-torch.save(model.state_dict(),'saved_model.pth') 
+#torch.save(model.state_dict(),'saved_model.pth') 
+
 
 # %%
 
