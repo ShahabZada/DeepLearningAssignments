@@ -56,12 +56,12 @@ class myMNISTdata(Dataset):
 # %%
 
 
-class Depthwise_Conv(nn.Module):
-	def __init__(self, in_fts, stride=(1, 1)):
-		super(Depthwise_Conv, self).__init__()
+class ConvDw(nn.Module):
+	def __init__(self, inChannels, stride=(1, 1)):
+		super(ConvDw, self).__init__()
 		self.conv = nn.Sequential(
-			nn.Conv2d(in_fts, in_fts, kernel_size=(3, 3), stride=stride, padding=(1, 1), groups=in_fts),
-			nn.BatchNorm2d(in_fts),
+			nn.Conv2d(inChannels, inChannels, kernel_size=(3, 3), stride=stride, padding=(1, 1), groups=inChannels),
+			nn.BatchNorm2d(inChannels),
 			nn.ReLU(inplace=True)
 		)
 
@@ -70,12 +70,12 @@ class Depthwise_Conv(nn.Module):
 		return x
 
 
-class Pointwise_Conv(nn.Module):
-	def __init__(self, in_fts, out_fts):
-		super(Pointwise_Conv, self).__init__()
+class ConvPw(nn.Module):
+	def __init__(self, inChannels, outChannels):
+		super(ConvPw, self).__init__()
 		self.conv = nn.Sequential(
-			nn.Conv2d(in_fts, out_fts, kernel_size=(1, 1)),
-			nn.BatchNorm2d(out_fts),
+			nn.Conv2d(inChannels, outChannels, kernel_size=(1, 1)),
+			nn.BatchNorm2d(outChannels),
 			nn.ReLU(inplace=True)
 		)
 
@@ -84,47 +84,39 @@ class Pointwise_Conv(nn.Module):
 		return x
 
 
-class Depthwise_Separable_Conv(nn.Module):
-	def __init__(self, in_fts, out_fts, stride=(1, 1)):
-		super(Depthwise_Separable_Conv, self).__init__()
-		self.dw = Depthwise_Conv(in_fts=in_fts, stride=stride)
-		self.pw = Pointwise_Conv(in_fts=in_fts, out_fts=out_fts)
+class MobileNet_block(nn.Module):
+	def __init__(self, inChannels, outChannels, stride=(1, 1)):
+		super(MobileNet_block, self).__init__()
+		self.dw = ConvDw(inChannels=inChannels, stride=stride)
+		self.pw = ConvPw(inChannels=inChannels, outChannels=outChannels)
 
 	def forward(self, input_image):
 		x = self.pw(self.dw(input_image))
 		return x
 
 
-class MyMobileNet_v1(nn.Module):
-	def __init__(self, in_fts=1, num_filter=32, num_classes=10):
-		super(MyMobileNet_v1, self).__init__()
+class MobileNet(nn.Module):
+	def __init__(self, inChannels=1, num_filter=32, num_classes=10):
+		super(MobileNet, self).__init__()
 
 		self.conv = nn.Sequential(
-			nn.Conv2d(in_fts, num_filter, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1)),
+			nn.Conv2d(inChannels, num_filter, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1)),
 			nn.BatchNorm2d(num_filter),
 			nn.ReLU(inplace=True)
 		)
 
-		self.in_fts = num_filter
+		self.inChannels = num_filter
 
-		# if type of sublist is list --> means make stride=(2,2)
-		# also check for length of sublist
-		# if length = 1 --> means stride=(2,2)
-		# if length = 2 --> means (num_times, num_filter)
-		self.nlayer_filter = [
-			num_filter * 2,  # no list() type --> default stride=(1,1)
-			[num_filter * pow(2, 2)],  # list() type and length is 1 --> means put stride=(2,2)
-			num_filter * pow(2, 2),
-			[num_filter * pow(2, 3)],
-			num_filter * pow(2, 3),
-			[num_filter * pow(2, 4)],
-			# list() type --> check length for this list = 2 --> means (n_times, num_filter)
-			[5, num_filter * pow(2, 4)],
-			[num_filter * pow(2, 5)],
-			num_filter * pow(2, 5)
-		]
-
-		self.DSC = self.layer_construct()
+		self.model = nn.Sequential(
+           MobileNet_block(num_filter, 64, 1),
+           MobileNet_block(64, 128, 2),
+           MobileNet_block(128, 128, 1),
+           MobileNet_block(128, 256, 2),
+           MobileNet_block(256, 512, 2),
+           MobileNet_block(512, 512, 1),
+           MobileNet_block(512, 1024, 2),
+           MobileNet_block(1024, 1024, 1),
+        )
 
 		self.avgpool = nn.AdaptiveAvgPool2d(output_size=(1, 1))
 		self.fc = nn.Sequential(
@@ -135,36 +127,16 @@ class MyMobileNet_v1(nn.Module):
 	def forward(self, input_image):
 		N = input_image.shape[0]
 		x = self.conv(input_image)
-		x = self.DSC(x)
+		x = self.model(x)
 		x = self.avgpool(x)
 		x = x.reshape(N, -1)
 		x = self.fc(x)
 		return x
 
-	def layer_construct(self):
-		block = OrderedDict()
-		index = 1
-		for l in self.nlayer_filter:
-			if type(l) == list:
-				if len(l) == 2:  # (num_times, out_channel)
-					for _ in range(l[0]):
-						block[str(index)] = Depthwise_Separable_Conv(self.in_fts, l[1])
-						index += 1
-				else:  # stride(2,2)
-					block[str(index)] = Depthwise_Separable_Conv(self.in_fts, l[0], stride=(2, 2))
-					self.in_fts = l[0]
-					index += 1
-			else:
-				block[str(index)] = Depthwise_Separable_Conv(self.in_fts, l)
-				self.in_fts = l
-				index += 1
-
-		return nn.Sequential(block)
 
 
-class helper_functions(MyMobileNet_v1):
-	#def __init__(self, model):
-	#	self.model = model
+class helper_functions(MobileNet):
+	
 	def train(self, train_loader, valid_loader, criterion, optimizer, training_epochs):
 		model = self
 		trainLoss=[]
@@ -382,16 +354,16 @@ plt.show()
 ##              Important parameters for the model              ##
 ##################################################################
 plot_err = True
-epochs = 20
+epochs = 10
 learning_rate = 0.05
 
 ######################################
 # Initializing the model 
 ######################################
 
-model = MyMobileNet_v1()
+model = MobileNet()
 summary(model, (1, 28, 28))
-# the helper_functions class inherits the MyMobileNet_v1
+# the helper_functions class inherits the MobileNet
 #So by constructing the helper_function class we initialize the model too
 model = helper_functions()
 
@@ -453,8 +425,7 @@ if plot_err:
 
 trainedModel = model
 trainedModel.load_state_dict(torch.load('saved_model.pth'))
-if torch.cuda.is_available():
-	trainedModel.cuda()
+trainedModel.cpu()
 
 ###############################################################
 #                  test data analysis
@@ -465,14 +436,14 @@ tlabel=0
 for data, labels in test_loader:
 	tdata=data
 	tlabel=labels
-if torch.cuda.is_available():
-	tdata, tlabel = tdata.cuda(), tlabel.cuda
+
 ################	
 #predict a digit
 ################
 test_pred = trainedModel.predict(tdata)
 testAcc = trainedModel.accuracy(labels,test_pred)
-print(trainedModel.predict_digit(tdata[0]))
+print(torch.unsqueeze(tdata[0], 0).shape)
+print(trainedModel.predict_digit(torch.unsqueeze(tdata[0], 0)))
 
 ################
 # Accuracy
@@ -492,7 +463,7 @@ print(trainedModel.precision_recall_f1score(labels, test_pred))
 
 trainedModel.confusion_Mat(tlabel, test_pred,'Test Data Confusion Matrix')
 
-# %%
+ # %%
 ###############################################################
 #       ploting correct and wrong predicted digits
 ###############################################################
