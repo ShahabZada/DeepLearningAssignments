@@ -342,6 +342,8 @@ class FocalLoss(nn.Module):
 
 	
 # %%
+
+
 wd_path = os.getcwd()
 data_path = 'Data/'
 
@@ -352,7 +354,7 @@ _path=os.path.join(wd_path,data_path)
 print("Wd",_path)
 
 print(_path)
-batch_size = 128
+batch_size = 1024
 
 
 ##################################################################
@@ -381,7 +383,7 @@ plt.show()
 ##              Important parameters for the model              ##
 ##################################################################
 plot_err = True
-epochs = 10
+epochs = 5
 learning_rate = 0.05
 
 ######################################
