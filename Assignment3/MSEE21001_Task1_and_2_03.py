@@ -30,7 +30,6 @@ from sklearn.metrics import classification_report
 from collections import OrderedDict
 
 
-# Create a Neural_Network class
 np.random.seed(5)
 # %%
 class myMNISTdata(Dataset):
@@ -127,7 +126,7 @@ class MobileNet(nn.Module):
 		self.avgpool = nn.AdaptiveAvgPool2d(output_size=(1, 1))
 		self.fc = nn.Sequential(
 			nn.Linear(1024, num_classes),
-			#nn.Softmax()
+			
 		)
 
 	def forward(self, input_image):
@@ -178,7 +177,7 @@ class helper_functions(MobileNet):
 				total += labels.size(0)
 				correct += predicted.eq(labels).sum().item()
 				
-				#train_acc = train_acc + torch.sum(torch.argmax(target) == labels)
+				
 				
 				train_loss += loss.item()
 			
@@ -191,7 +190,6 @@ class helper_functions(MobileNet):
 			valid_acc = 0.0
 			total=0.0
 			correct=0.0
-			#model.eval()     # Optional when not using Model Specific layer
 			for data, labels in valid_loader:
 				
 				# Transfer Data to GPU if available
@@ -212,8 +210,7 @@ class helper_functions(MobileNet):
 			validLoss.append(valid_loss/len(valid_loader))
 			validAcc.append(100.*correct/total)
 			
-			#if lr_decay_scheduler is not None:
-			#	lr_decay_scheduler.step()
+			
 			min_valid_loss = self.EarlyStopping(model, min_valid_loss, valid_loss/len(valid_loader))
 
 			print(f'Epoch {e+1} Training Loss: {train_loss / len(train_loader)} \t\t Validation Loss: {valid_loss / len(valid_loader)}')
@@ -292,12 +289,7 @@ class helper_functions(MobileNet):
 		
 		return Acc # return accuracy    
 		
-	def saveModel(self,name):
-		pass
-
-		
-	def loadModel(self,name):
-		pass
+	
 
 	def confusion_Mat(self, y_true, y_pred,name):
 		_, pred = y_pred.max(1)
@@ -346,10 +338,8 @@ class FocalLoss(nn.Module):
         loss = -1 * (1-pt)**self.gamma * logpt
         if self.size_average: return loss.mean()
         else: return loss.sum()
-# %%
-	
 
-#def main():   
+
 	
 # %%
 wd_path = os.getcwd()
@@ -425,7 +415,7 @@ if torch.cuda.is_available():
 MobileNetmodel, trainLoss, validLoss, trainAcc, validAcc=model.train(MobileNetmodel, train_loader, valid_loader, criterion, optimizer, epochs)
 
 #saving the model
-torch.save(MobileNetmodel.state_dict(),'experiment4.pth') 
+torch.save(MobileNetmodel.state_dict(),'models/experimentNo.pth') 
 
 
 # %%
@@ -457,7 +447,7 @@ if plot_err:
 # create class object
 helper_func = helper_functions()
 trainedModel = MobileNet()
-trainedModel.load_state_dict(torch.load('experiment4.pth'))
+trainedModel.load_state_dict(torch.load('models/experiment4.pth'))
 #trainedModel.cpu()
 trainedModel.eval()
 ###############################################################
@@ -469,7 +459,7 @@ tlabel=0
 for data, labels in test_loader:
 	tdata=data
 	tlabel=labels
-#print(tdata[0])
+
 ################	
 #predict a digit
 ################
@@ -540,15 +530,14 @@ plt.savefig("correct.jpg")
 ###############################################################
 #       Visualization
 ###############################################################
-model_weights = [] # we will save the conv layer weights in this list
-conv_layers = [] # we will save the 49 conv layers in this list
-# get all the model children as list
+model_weights = [] 
+conv_layers = [] 
+
 model_children = list(trainedModel.children())
 
 # counter to keep count of the conv layers
 counter = 0 
 
-# append all the conv layers and their respective weights to the list
 for i in range(len(model_children)):
 	
 	if type(model_children[i]) == nn.Conv2d:
@@ -601,9 +590,3 @@ data_pred = predicted
 helper_func.tSNE(testdata,data_pred,'test data tsne plot')
 
 
-
-#if __name__ == '__main__':
-#	main()
-
-
-# %%
