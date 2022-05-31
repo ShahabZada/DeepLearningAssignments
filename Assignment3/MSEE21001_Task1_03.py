@@ -9,6 +9,7 @@ import torch.nn.functional as F
 import torch.optim as optim 
 from torch.utils.data import Dataset
 from torchsummary import summary
+from torch.autograd import Variable
 
 import random
 from matplotlib import image as img
@@ -108,14 +109,19 @@ class MobileNet(nn.Module):
 		self.inChannels = num_filter
 
 		self.model = nn.Sequential(
-		   MobileNet_block(num_filter, 64, 1),
-		   MobileNet_block(64, 128, 2),
-		   MobileNet_block(128, 128, 1),
-		   MobileNet_block(128, 256, 2),
-		   MobileNet_block(256, 512, 2),
-		   MobileNet_block(512, 512, 1),
-		   MobileNet_block(512, 1024, 2),
-		   MobileNet_block(1024, 1024, 1),
+			MobileNet_block(32, 64, 1),
+			MobileNet_block(64, 128, 2),
+			MobileNet_block(128, 128, 1),
+			MobileNet_block(128, 256, 2),
+			MobileNet_block(256, 256, 1),
+			MobileNet_block(256, 512, 2),
+			MobileNet_block(512, 512, 1),
+			MobileNet_block(512, 512, 1),
+			MobileNet_block(512, 512, 1),
+			MobileNet_block(512, 512, 1),
+			MobileNet_block(512, 512, 1),
+			MobileNet_block(512, 1024, 2),
+			MobileNet_block(1024, 1024, 1),
 		)
 
 		self.avgpool = nn.AdaptiveAvgPool2d(output_size=(1, 1))
@@ -224,7 +230,7 @@ class helper_functions(MobileNet):
 			min_valid_loss = valid_loss
 			
 			# Saving State Dict
-			torch.save(model.state_dict(), 'saved_model.pth') 
+			torch.save(model.state_dict(), 'ErlStpsaved_model.pth') 
 		
 		return min_valid_loss
 
@@ -309,7 +315,37 @@ class helper_functions(MobileNet):
 		print(classification_report(y_true, pred, digits=10))
 		#return (Acc_score, prec_score, rec_score, F1_score)
 
+# %%
+class FocalLoss(nn.Module):
+    def __init__(self, gamma=0, alpha=None, size_average=True):
+        super(FocalLoss, self).__init__()
+        self.gamma = gamma
+        self.alpha = alpha
+        if isinstance(alpha,(float,int)): self.alpha = torch.Tensor([alpha,1-alpha])
+        if isinstance(alpha,list): self.alpha = torch.Tensor(alpha)
+        self.size_average = size_average
 
+    def forward(self, input, target):
+        if input.dim()>2:
+            input = input.view(input.size(0),input.size(1),-1)  # N,C,H,W => N,C,H*W
+            input = input.transpose(1,2)    # N,C,H*W => N,H*W,C
+            input = input.contiguous().view(-1,input.size(2))   # N,H*W,C => N*H*W,C
+        target = target.view(-1,1)
+
+        logpt = F.log_softmax(input)
+        logpt = logpt.gather(1,target)
+        logpt = logpt.view(-1)
+        pt = Variable(logpt.data.exp())
+
+        if self.alpha is not None:
+            if self.alpha.type()!=input.data.type():
+                self.alpha = self.alpha.type_as(input.data)
+            at = self.alpha.gather(0,target.data.view(-1))
+            logpt = logpt * Variable(at)
+
+        loss = -1 * (1-pt)**self.gamma * logpt
+        if self.size_average: return loss.mean()
+        else: return loss.sum()
 # %%
 	
 
@@ -326,7 +362,7 @@ _path=os.path.join(wd_path,data_path)
 print("Wd",_path)
 
 print(_path)
-batch_size = 64
+batch_size = 128
 
 
 ##################################################################
@@ -371,8 +407,9 @@ model = helper_functions()
 ######################################
 #Loss function and optimizer
 ######################################
+#criterion = FocalLoss()
 criterion = nn.CrossEntropyLoss()
-#optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9)
+#optimizer = optim.SGD(MobileNetmodel.parameters(), lr=learning_rate, momentum=0.9)
 optimizer = optim.Adam(MobileNetmodel.parameters(),lr=learning_rate,betas=(0.9,0.999),eps=1e-08,weight_decay=0,amsgrad=False)
 
 if torch.cuda.is_available():
@@ -388,7 +425,7 @@ if torch.cuda.is_available():
 MobileNetmodel, trainLoss, validLoss, trainAcc, validAcc=model.train(MobileNetmodel, train_loader, valid_loader, criterion, optimizer, epochs)
 
 #saving the model
-#torch.save(model.state_dict(),'saved_model.pth') 
+torch.save(MobileNetmodel.state_dict(),'experiment4.pth') 
 
 
 # %%
@@ -419,9 +456,9 @@ if plot_err:
 
 # create class object
 helper_func = helper_functions()
-trainedModel = MobileNetmodel
-trainedModel.load_state_dict(torch.load('saved_model.pth'))
-trainedModel.cpu()
+trainedModel = MobileNet()
+trainedModel.load_state_dict(torch.load('experiment4.pth'))
+#trainedModel.cpu()
 trainedModel.eval()
 ###############################################################
 #                  test data analysis
